@@ -21,7 +21,7 @@ jobs:
       - name: Go vet
         run: go vet ./...
       - name: Shell syntax
-        run: bash -n install.sh install-server.sh install-client.sh bootstrap.sh scripts/*.sh tests/*.sh
+        run: bash -n install.sh install-server.sh install-client.sh bootstrap.sh purge.sh scripts/*.sh tests/*.sh
       - name: Pairing code round-trip
         run: bash tests/pairing-code.sh
       - name: Python syntax

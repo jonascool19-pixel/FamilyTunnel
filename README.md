@@ -44,6 +44,22 @@ sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsS
 
 Der Installer fragt direkt nach dem Pairing-Code, legt daraus automatisch die geschützte Konfigurationsdatei an und prüft deren Inhalt. Anschließend fragt er nach der privaten IPv4 des CT. Der Oracle-SSH-Schlüssel und eine manuelle Dateiübertragung werden hierfür nicht benötigt.
 
+## Vollständiger Reset
+
+Der Reset entfernt FamilyTunnel-Dienste, Konfiguration, Datenbank, Schlüssel, WireGuard-Profil und FamilyTunnel-Backups. Auf der Oracle-Seite wird auch das ausschließlich für FamilyTunnel eingerichtete Caddy entfernt. Allgemeine Ubuntu-Pakete und Systemupdates bleiben erhalten.
+
+Oracle-Server vollständig zurücksetzen und direkt frisch installieren:
+
+```bash
+sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/purge.sh | sudo bash && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-server.sh | sudo bash
+```
+
+Proxmox-CT vollständig zurücksetzen und direkt frisch installieren:
+
+```bash
+sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/purge.sh | sudo bash && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-client.sh | sudo bash
+```
+
 Der Installer:
 
 - aktualisiert Ubuntu und installiert WireGuard, Caddy, SQLite und Hilfspakete;
