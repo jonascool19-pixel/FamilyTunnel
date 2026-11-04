@@ -1,0 +1,6 @@
+/dist/
+*.db*
+*.key
+*.pem
+config.json
+pairing.json

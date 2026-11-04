@@ -1,0 +1,6 @@
+[Unit]
+Description=FamilyTunnel bounded service recovery
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/familytunnel/manage.sh repair

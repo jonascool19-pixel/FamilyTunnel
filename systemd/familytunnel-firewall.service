@@ -1,0 +1,13 @@
+[Unit]
+Description=FamilyTunnel scoped firewall rules
+After=network-online.target wg-quick@ft0.service
+Before=familytunnel.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/familytunnel/firewall.sh apply
+ExecStop=/usr/local/lib/familytunnel/firewall.sh remove
+
+[Install]
+WantedBy=multi-user.target
