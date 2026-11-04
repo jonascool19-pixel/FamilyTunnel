@@ -29,7 +29,7 @@ FamilyTunnel wird auf zwei Systemen installiert. Der SSH-Schlüssel der Oracle-I
 Diesen Befehl im SSH-Terminal der Oracle-VM ausführen. Er wählt automatisch die Rolle `server`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-server.sh | sudo bash
+sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-server.sh | sudo bash
 ```
 
 Die Installation erzeugt `/var/lib/familytunnel/pairing.json`. Diese Datei wird anschließend vertraulich vom Oracle-Server auf den Heim-CT übertragen. Sie enthält Zugangsdaten und gehört nicht ins GitHub-Repository.
@@ -39,7 +39,7 @@ Die Installation erzeugt `/var/lib/familytunnel/pairing.json`. Diese Datei wird 
 Im Terminal des Ubuntu-24.04-CT folgenden Befehl ausführen. Er wählt automatisch die Rolle `client`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-client.sh | sudo bash
+sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-client.sh | sudo bash
 ```
 
 Der Installer fragt nach dem lokalen Pfad zur zuvor übertragenen `pairing.json` und nach der privaten IPv4 des CT. Der Oracle-SSH-Schlüssel wird hierfür nicht benötigt.
