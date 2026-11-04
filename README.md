@@ -22,6 +22,12 @@ Das erzeugt statische Linux-Binaries für amd64 und arm64 mit Prüfsummen in `di
 
 ## Installation
 
+Auf beiden Ubuntu-24.04-Systemen wird derselbe Befehl ausgeführt:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/bootstrap.sh | sudo FT_BUNDLE_URL=https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/dist/familytunnel-0.1.0-install.tar.gz bash
+```
+
 Das Release-Verzeichnis wird zuerst sicher auf den VPS und den CT übertragen. Dann wird derselbe Installer auf beiden Systemen ausgeführt. Zuerst wird die Rolle `server` auf der Oracle-VM gewählt. Danach wird `/var/lib/familytunnel/pairing.json` vertraulich zum CT übertragen und dort die Rolle `client` gewählt.
 
 Der Installer:
@@ -84,7 +90,7 @@ Die echte Neuinstallation, Wiederholungsinstallation, Neustart-, Tunnelabbruch-,
 - Version 0.1.0 veröffentlicht HTTP/HTTPS-Backends; rohe TCP/UDP-Dienste und WebSocket-Upgrades sind nicht implementiert.
 - DDNS wird geprüft und bei falscher IP gewarnt. Automatisches Ändern ist ohne Anbieter und Zugangsdaten nicht möglich.
 - OCI-Regeln werden nur automatisiert, wenn eine konfigurierte OCI CLI mit passenden IAM-Rechten vorhanden ist.
-- Ein öffentlich funktionierender `curl | bash`-Befehl setzt ein unveränderliches HTTPS-Release voraus. Das Repository enthält alles dafür; ohne vom Benutzer gewählten Hosting-Ort kann kein ehrlicher öffentlicher Download-Link erzeugt werden.
+- Das Installationspaket wird aktuell aus dem `main`-Branch geladen. Für unveränderliche Produktionsinstallationen sollte künftig ein signiertes GitHub-Release verwendet werden.
 - Das interne Admin-Zertifikat ist selbstsigniert. Öffentliche Dienstzertifikate verwaltet Caddy automatisch.
 - Mehrere Heim-CTs oder mehrere WireGuard-Peers werden in 0.1.0 nicht unterstützt.
 
