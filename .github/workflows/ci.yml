@@ -21,7 +21,7 @@ jobs:
       - name: Go vet
         run: go vet ./...
       - name: Shell syntax
-        run: bash -n install.sh bootstrap.sh scripts/*.sh tests/*.sh
+        run: bash -n install.sh install-server.sh install-client.sh bootstrap.sh scripts/*.sh tests/*.sh
       - name: Python syntax
         run: python3 -m py_compile scripts/oci-nsg.py
       - name: Linux builds

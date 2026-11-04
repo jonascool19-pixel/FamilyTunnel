@@ -22,13 +22,27 @@ Das erzeugt statische Linux-Binaries für amd64 und arm64 mit Prüfsummen in `di
 
 ## Installation
 
-Auf beiden Ubuntu-24.04-Systemen wird derselbe Befehl ausgeführt:
+FamilyTunnel wird auf zwei Systemen installiert. Der SSH-Schlüssel der Oracle-Instanz dient nur zur Anmeldung bei Oracle und wird auf dem Proxmox-CT nicht verwendet.
+
+### 1. Oracle-Cloud-Instanz
+
+Diesen Befehl im SSH-Terminal der Oracle-VM ausführen. Er wählt automatisch die Rolle `server`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/bootstrap.sh | sudo FT_BUNDLE_URL=https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/dist/familytunnel-0.1.0-install.tar.gz bash
+curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-server.sh | sudo bash
 ```
 
-Das Release-Verzeichnis wird zuerst sicher auf den VPS und den CT übertragen. Dann wird derselbe Installer auf beiden Systemen ausgeführt. Zuerst wird die Rolle `server` auf der Oracle-VM gewählt. Danach wird `/var/lib/familytunnel/pairing.json` vertraulich zum CT übertragen und dort die Rolle `client` gewählt.
+Die Installation erzeugt `/var/lib/familytunnel/pairing.json`. Diese Datei wird anschließend vertraulich vom Oracle-Server auf den Heim-CT übertragen. Sie enthält Zugangsdaten und gehört nicht ins GitHub-Repository.
+
+### 2. Proxmox-CT zu Hause
+
+Im Terminal des Ubuntu-24.04-CT folgenden Befehl ausführen. Er wählt automatisch die Rolle `client`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-client.sh | sudo bash
+```
+
+Der Installer fragt nach dem lokalen Pfad zur zuvor übertragenen `pairing.json` und nach der privaten IPv4 des CT. Der Oracle-SSH-Schlüssel wird hierfür nicht benötigt.
 
 Der Installer:
 
