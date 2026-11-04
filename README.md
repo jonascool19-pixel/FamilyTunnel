@@ -32,7 +32,7 @@ Diesen Befehl im SSH-Terminal der Oracle-VM ausführen. Er wählt automatisch di
 sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-server.sh | sudo bash
 ```
 
-Die Installation erzeugt `/var/lib/familytunnel/pairing.json`. Diese Datei wird anschließend vertraulich vom Oracle-Server auf den Heim-CT übertragen. Sie enthält Zugangsdaten und gehört nicht ins GitHub-Repository.
+Am Ende zeigt der Installer einen deutlich markierten **Pairing-Code für den Heim-CT** an. Der vollständige Code wird kopiert und später in das Eingabefeld des Client-Installers eingefügt. Er enthält geheime Zugangsdaten und gehört weder in einen Chat noch ins GitHub-Repository. Die zugrunde liegende Datei bleibt zusätzlich unter `/var/lib/familytunnel/pairing.json` gespeichert.
 
 ### 2. Proxmox-CT zu Hause
 
@@ -42,7 +42,7 @@ Im Terminal des Ubuntu-24.04-CT folgenden Befehl ausführen. Er wählt automatis
 sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-client.sh | sudo bash
 ```
 
-Der Installer fragt nach dem lokalen Pfad zur zuvor übertragenen `pairing.json` und nach der privaten IPv4 des CT. Der Oracle-SSH-Schlüssel wird hierfür nicht benötigt.
+Der Installer fragt direkt nach dem Pairing-Code, legt daraus automatisch die geschützte Konfigurationsdatei an und prüft deren Inhalt. Anschließend fragt er nach der privaten IPv4 des CT. Der Oracle-SSH-Schlüssel und eine manuelle Dateiübertragung werden hierfür nicht benötigt.
 
 Der Installer:
 

@@ -55,7 +55,18 @@ EOF
   fi
   listen=10.77.0.1:8443;data_listen=10.77.0.1:9081
  else
-  pairing=${FT_PAIRING_FILE:-};if [[ -z $pairing ]]; then read -rp 'Pfad zur sicher übertragenen pairing.json vom VPS: ' pairing </dev/tty;fi
+  pairing=${FT_PAIRING_FILE:-}
+  if [[ -z $pairing ]]; then
+   pairing="$STATE/pairing-input.json"
+   read -rsp 'Pairing-Code vom Oracle-Server hier einfügen: ' pairing_code </dev/tty
+   echo
+   if [[ -z $pairing_code ]] || ! printf '%s' "$pairing_code" | base64 -d > "$pairing" 2>/dev/null; then
+    rm -f "$pairing"
+    echo 'Pairing-Code ist ungültig oder unvollständig.' >&2
+    exit 1
+   fi
+   chmod 600 "$pairing"
+  fi
   [[ -f $pairing ]] || { echo 'Pairing-Datei fehlt.' >&2; exit 1; }
   python3 - "$pairing" <<'PY'
 import json,ipaddress,base64,sys,re
@@ -127,7 +138,15 @@ echo "Installation abgeschlossen. Verwaltung: https://$(jq -r .listen "$STATE/co
 echo "Benutzer: admin. Initialpasswort: sudo cat $STATE/initial-password"
 openssl x509 -in "$STATE/admin.crt" -noout -fingerprint -sha256
 if [[ $role == server ]];then
- echo "Pairing-Datei vertraulich zum CT übertragen: $STATE/pairing.json"
+ echo
+ echo '==================== PAIRING-CODE FÜR DEN HEIM-CT ===================='
+ base64 -w0 "$STATE/pairing.json"
+ echo
+ echo '======================================================================'
+ echo 'Diesen vollständigen Code kopieren und bei der Client-Installation'
+ echo 'in das Feld "Pairing-Code vom Oracle-Server" einfügen.'
+ echo 'Der Code enthält geheime Zugangsdaten: nicht veröffentlichen oder teilen.'
+ echo "Die Quelldatei bleibt geschützt unter: $STATE/pairing.json"
  echo 'OCI: NSG muss der VM-VNIC zugewiesen sein. Automation: /usr/local/lib/familytunnel/oci-nsg.py NSG_OCID [VNIC_OCID]'
 fi
 if [[ -e /var/run/reboot-required ]];then echo 'Ubuntu empfiehlt einen Neustart. Er wird nicht ohne deine Kontrolle ausgelöst.';fi
