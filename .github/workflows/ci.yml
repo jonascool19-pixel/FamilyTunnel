@@ -25,4 +25,4 @@ jobs:
       - name: Python syntax
         run: python3 -m py_compile scripts/oci-nsg.py
       - name: Linux builds
-        run: ./scripts/build.sh
+        run: bash ./scripts/build.sh
