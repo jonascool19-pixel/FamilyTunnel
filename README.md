@@ -15,7 +15,7 @@ FamilyTunnel veröffentlicht HTTP-Dienste aus einem Heimnetz über eine Oracle-C
 Auf einem Rechner mit Go 1.23 oder neuer:
 
 ```bash
-./scripts/build.sh
+bash ./scripts/build.sh
 ```
 
 Das erzeugt statische Linux-Binaries für amd64 und arm64 mit Prüfsummen in `dist/`. Der Installer akzeptiert ausschließlich diese geprüften Dateien.
