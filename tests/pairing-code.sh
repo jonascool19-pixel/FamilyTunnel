@@ -8,7 +8,7 @@ EOF
 code=$(base64 -w0 "$tmp/pairing.json")
 printf '%s' "$code" | base64 -d > "$tmp/decoded.json"
 cmp "$tmp/pairing.json" "$tmp/decoded.json"
-if printf '%s' "${code%????}" | base64 -d 2>/dev/null | python3 -m json.tool >/dev/null 2>&1; then
+if printf '%s' "${code:0:40}" | base64 -d 2>/dev/null | python3 -m json.tool >/dev/null 2>&1; then
  echo 'Abgeschnittener Pairing-Code wurde fälschlich akzeptiert.' >&2
  exit 1
 fi
