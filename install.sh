@@ -58,8 +58,7 @@ EOF
   pairing=${FT_PAIRING_FILE:-}
   if [[ -z $pairing ]]; then
    pairing="$STATE/pairing-input.json"
-   read -rsp 'Pairing-Code vom Oracle-Server hier einfügen: ' pairing_code </dev/tty
-   echo
+   read -rp 'Pairing-Code vom Oracle-Server hier einfügen: ' pairing_code </dev/tty
    if [[ -z $pairing_code ]] || ! printf '%s' "$pairing_code" | base64 -d > "$pairing" 2>/dev/null; then
     rm -f "$pairing"
     echo 'Pairing-Code ist ungültig oder unvollständig.' >&2
@@ -75,7 +74,27 @@ for k in ('server_public_key','client_private_key'): assert len(base64.b64decode
 assert re.fullmatch('[a-f0-9]{64}',d['token'])
 PY
   public_ip=$(jq -er .endpoint "$pairing");server_pub=$(jq -er .server_public_key "$pairing");client_key=$(jq -er .client_private_key "$pairing");token=$(jq -er .token "$pairing")
-  admin_ip=${FT_ADMIN_IP:-};if [[ -z $admin_ip ]];then read -rp 'Interne IPv4 dieses CT für die Webverwaltung (z. B. 192.168.1.50): ' admin_ip </dev/tty;fi
+  admin_ip=${FT_ADMIN_IP:-}
+  if [[ -z $admin_ip ]];then
+   detected_ip=$(python3 - <<'PY'
+import ipaddress, subprocess
+for value in subprocess.check_output(["hostname", "-I"], text=True).split():
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        continue
+    if ip.version == 4 and ip.is_private and not ip.is_loopback and not ip.is_link_local and ip not in ipaddress.ip_network("10.77.0.0/30"):
+        print(ip)
+        break
+PY
+)
+   if [[ -n $detected_ip ]]; then
+    read -rp "Interne IPv4 dieses CT für die Webverwaltung [$detected_ip]: " admin_ip </dev/tty
+    admin_ip=${admin_ip:-$detected_ip}
+   else
+    read -rp 'Interne IPv4 dieses CT für die Webverwaltung (z. B. 192.168.1.50): ' admin_ip </dev/tty
+   fi
+  fi
   python3 - "$admin_ip" <<'PY'
 import ipaddress,sys
 ip=ipaddress.ip_address(sys.argv[1]);assert ip.version==4 and ip.is_private and not ip.is_loopback and not ip.is_unspecified

@@ -42,7 +42,7 @@ Im Terminal des Ubuntu-24.04-CT folgenden Befehl ausführen. Er wählt automatis
 sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-client.sh | sudo bash
 ```
 
-Der Installer fragt direkt nach dem Pairing-Code, legt daraus automatisch die geschützte Konfigurationsdatei an und prüft deren Inhalt. Anschließend fragt er nach der privaten IPv4 des CT. Der Oracle-SSH-Schlüssel und eine manuelle Dateiübertragung werden hierfür nicht benötigt.
+Der Installer fragt direkt nach dem Pairing-Code. Die eingefügte Zeichenfolge bleibt zur eindeutigen Kontrolle sichtbar; deshalb sollte währenddessen niemand den Bildschirm mitlesen. Der Installer legt daraus automatisch die geschützte Konfigurationsdatei an und prüft deren Inhalt. Anschließend erkennt er die private IPv4 des CT und zeigt sie als Vorgabe in eckigen Klammern. Wenn die angezeigte Adresse stimmt, genügt `Enter`. Der Oracle-SSH-Schlüssel und eine manuelle Dateiübertragung werden nicht benötigt.
 
 ## Vollständiger Reset
 
