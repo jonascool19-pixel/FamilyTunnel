@@ -131,6 +131,8 @@ Der Verbindungsstatus in der Weboberfläche aktualisiert sich automatisch alle 1
 
 Eine Weiterleitung verbindet eine öffentliche Domain mit einem lokalen Programm. Beispiel: Der DNS-A-Eintrag `familien-gmbh.ddns.net` zeigt auf die öffentliche Oracle-IPv4; als Backend wird die vom Heim-CT erreichbare Adresse `http://192.168.178.30:8096` eingetragen. Aufgerufen wird der Dienst anschließend über `https://familien-gmbh.ddns.net`. Domainfelder enthalten kein `https://`; Backendfelder enthalten immer Protokoll, private IP und Port.
 
+Für die einfache Einrichtung muss nur die öffentliche Domain eingegeben werden. Der Client prüft, ob ihr DNS-Eintrag auf Oracle zeigt, und durchsucht ausschließlich das private `/24`-Heimnetz nach einer begrenzten Liste üblicher HTTP-Ports. Höchstens 254 private Hosts werden mit kurzen Zeitlimits und 64 begrenzten Arbeitern geprüft. Gefundene Dienste erscheinen als anklickbare Auswahl; manuelle Eingaben bleiben für Sonderfälle verfügbar. Die Suche öffnet keine Ports und verlässt das private Heimnetz nicht.
+
 ## Getestet
 
 Automatisiert geprüft werden Build für Linux amd64/arm64, Passwort-Hashing, Eingabevalidierung, SSRF-Schutz für Backends, Caddy-Konfiguration, atomare Routenänderung und SQLite-Persistenz. `tests/static-checks.sh` prüft Shell-Syntax, systemd-Dateien und Release-Prüfsummen, sofern die jeweiligen Programme vorhanden sind.

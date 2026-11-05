@@ -23,14 +23,15 @@ import (
 var web embed.FS
 
 type Service struct {
-	cfg      Config
-	db       *sql.DB
-	auth     *auth
-	traffic  traffic
-	mu       sync.Mutex
-	healthMu sync.RWMutex
-	health   map[string]any
-	started  time.Time
+	cfg         Config
+	db          *sql.DB
+	auth        *auth
+	traffic     traffic
+	mu          sync.Mutex
+	healthMu    sync.RWMutex
+	health      map[string]any
+	started     time.Time
+	discoveryMu sync.Mutex
 }
 
 func newService(c Config) (*Service, error) {
@@ -70,6 +71,7 @@ func (s *Service) handlers() http.Handler {
 	m.HandleFunc("/api/password", s.auth.protect(s.auth.password))
 	m.HandleFunc("/api/routes", s.auth.protect(s.routeAPI))
 	m.HandleFunc("/api/routes/", s.auth.protect(s.routeAPI))
+	m.HandleFunc("/api/discover", s.auth.protect(s.discoveryAPI))
 	m.HandleFunc("/api/status", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			fail(w, 405, "GET required")
