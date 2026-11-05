@@ -163,7 +163,7 @@ func (a *auth) password(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if decode(w, r, &in) != nil || len(in.Password) < 12 || len(in.Password) > 256 || len(in.Current) > 1024 {
-		fail(w, 400, "password must have 12–256 characters")
+		fail(w, 400, "Das neue Passwort muss mindestens 12 und höchstens 256 Zeichen haben.")
 		return
 	}
 	select {
