@@ -127,6 +127,8 @@ familytunnel uninstall --yes
 
 Der Heim-Controller zählt HTTP-Requests, Fehler sowie eingehende und ausgehende HTTP-Nutzdaten pro Domain und UTC-Stunde. Die GUI aggregiert Stunde, Tag, Monat oder Gesamt. TLS-, TCP- und WireGuard-Overhead ist nicht enthalten. Healthchecks prüfen WireGuard-Handshakes, SQLite, Server-Synchronisierung, Caddy, DNS-A-Auflösung und Backend-TCP-Erreichbarkeit. Der Reparatur-Timer läuft alle zwei Minuten.
 
+Der Verbindungsstatus in der Weboberfläche aktualisiert sich automatisch alle 15 Sekunden. Der manuelle Knopf bleibt für eine sofortige Aktualisierung erhalten. Der Installer verwendet auf Server und Client farbige Banner, Fortschrittsstufen und einen eingerahmten Abschlussbereich.
+
 ## Getestet
 
 Automatisiert geprüft werden Build für Linux amd64/arm64, Passwort-Hashing, Eingabevalidierung, SSRF-Schutz für Backends, Caddy-Konfiguration, atomare Routenänderung und SQLite-Persistenz. `tests/static-checks.sh` prüft Shell-Syntax, systemd-Dateien und Release-Prüfsummen, sofern die jeweiligen Programme vorhanden sind.
