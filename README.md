@@ -129,6 +129,8 @@ Der Heim-Controller zählt HTTP-Requests, Fehler sowie eingehende und ausgehende
 
 Der Verbindungsstatus in der Weboberfläche aktualisiert sich automatisch alle 15 Sekunden. Der manuelle Knopf bleibt für eine sofortige Aktualisierung erhalten. Der Installer verwendet auf Server und Client farbige Banner, Fortschrittsstufen und einen eingerahmten Abschlussbereich.
 
+Eine Weiterleitung verbindet eine öffentliche Domain mit einem lokalen Programm. Beispiel: Der DNS-A-Eintrag `zugang.example.net` zeigt auf die öffentliche Oracle-IPv4; als Backend wird die vom Heim-CT erreichbare Adresse `http://192.168.50.30:8096` eingetragen. Aufgerufen wird der Dienst anschließend über `https://zugang.example.net`. Domainfelder enthalten kein `https://`; Backendfelder enthalten immer Protokoll, private IP und Port.
+
 ## Getestet
 
 Automatisiert geprüft werden Build für Linux amd64/arm64, Passwort-Hashing, Eingabevalidierung, SSRF-Schutz für Backends, Caddy-Konfiguration, atomare Routenänderung und SQLite-Persistenz. `tests/static-checks.sh` prüft Shell-Syntax, systemd-Dateien und Release-Prüfsummen, sofern die jeweiligen Programme vorhanden sind.
