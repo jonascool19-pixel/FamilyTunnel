@@ -114,6 +114,7 @@ familytunnel uninstall --yes
 ## Sicherheitsmodell
 
 - Argon2id: 64 MiB, drei Durchläufe, parallele Login-Hashes begrenzt
+- Automatisch erzeugtes Startpasswort mit 32 Zeichen; geänderte Passwörter müssen 12–256 Zeichen lang sein
 - Secure/HttpOnly/SameSite-Strict-Sitzungscookie, CSRF-Token, Login-Limit, maximal 64 Sitzungen
 - Admin-GUI des CT nur auf einer tatsächlich vorhandenen privaten RFC1918-Adresse; Server-GUI nur im Tunnel
 - Caddy-Admin-API nur auf `127.0.0.1`; internes Proxy/API nur auf WireGuard-Adressen
