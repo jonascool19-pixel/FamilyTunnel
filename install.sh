@@ -29,7 +29,18 @@ if [[ -f $STATE/config.json ]]; then
  echo "Bestehende $role-Konfiguration und Schlüssel werden beibehalten."
 else
  role=${FT_ROLE:-}
- if [[ -z $role ]]; then read -rp 'Rolle (server auf Oracle / client zuhause): ' role </dev/tty; fi
+ if [[ -z $role ]]; then
+  echo
+  echo 'Wo soll FamilyTunnel installiert werden?'
+  echo '  1) Server (Oracle Cloud-Instanz / öffentlicher VPS)'
+  echo '  2) Client (Proxmox Ubuntu CT zu Hause)'
+  read -rp 'Auswahl [1 oder 2]: ' role_choice </dev/tty
+  case "$role_choice" in
+   1) role=server ;;
+   2) role=client ;;
+   *) echo 'Ungültige Auswahl. Bitte 1 oder 2 eingeben.' >&2; exit 1 ;;
+  esac
+ fi
  [[ $role == server || $role == client ]] || { echo 'Ungültige Rolle.' >&2; exit 1; }
  if [[ $role == server ]]; then
   public_ip=${FT_PUBLIC_IP:-};if [[ -z $public_ip ]]; then read -rp 'Öffentliche IPv4 der Oracle-VM: ' public_ip </dev/tty; fi

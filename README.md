@@ -22,11 +22,26 @@ Das erzeugt statische Linux-Binaries für amd64 und arm64 mit Prüfsummen in `di
 
 ## Installation
 
-FamilyTunnel wird auf zwei Systemen installiert. Der SSH-Schlüssel der Oracle-Instanz dient nur zur Anmeldung bei Oracle und wird auf dem Proxmox-CT nicht verwendet.
+Auf der Oracle-Instanz und auf dem Proxmox-CT wird derselbe Befehl verwendet:
+
+```bash
+sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-familytunnel.sh | sudo bash
+```
+
+Der Installer zeigt ein nummeriertes Menü. Auf der Oracle-Instanz wird `1` gewählt, auf dem Proxmox-CT `2`:
+
+```text
+Wo soll FamilyTunnel installiert werden?
+  1) Server (Oracle Cloud-Instanz / öffentlicher VPS)
+  2) Client (Proxmox Ubuntu CT zu Hause)
+Auswahl [1 oder 2]:
+```
+
+Der SSH-Schlüssel der Oracle-Instanz dient nur zur Anmeldung bei Oracle und wird auf dem Proxmox-CT nicht verwendet.
 
 ### 1. Oracle-Cloud-Instanz
 
-Diesen Befehl im SSH-Terminal der Oracle-VM ausführen. Er wählt automatisch die Rolle `server`:
+Dort den gemeinsamen Installationsbefehl ausführen und `1` wählen. Der folgende rollenfeste Befehl bleibt für automatisierte Installationen verfügbar:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-server.sh | sudo bash
@@ -36,7 +51,7 @@ Am Ende zeigt der Installer einen deutlich markierten **Pairing-Code für den He
 
 ### 2. Proxmox-CT zu Hause
 
-Im Terminal des Ubuntu-24.04-CT folgenden Befehl ausführen. Er wählt automatisch die Rolle `client`:
+Im Terminal des Ubuntu-24.04-CT den gemeinsamen Installationsbefehl ausführen und `2` wählen. Der folgende rollenfeste Befehl bleibt für automatisierte Installationen verfügbar:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-client.sh | sudo bash
@@ -51,13 +66,13 @@ Der Reset entfernt FamilyTunnel-Dienste, Konfiguration, Datenbank, Schlüssel, W
 Oracle-Server vollständig zurücksetzen und direkt frisch installieren:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/purge.sh | sudo bash && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-server.sh | sudo bash
+sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/purge.sh | sudo bash && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-familytunnel.sh | sudo bash
 ```
 
 Proxmox-CT vollständig zurücksetzen und direkt frisch installieren:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/purge.sh | sudo bash && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-client.sh | sudo bash
+sudo apt-get update && sudo apt-get install -y ca-certificates curl && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/purge.sh | sudo bash && curl -fsSL https://raw.githubusercontent.com/jonascool19-pixel/FamilyTunnel/main/install-familytunnel.sh | sudo bash
 ```
 
 Der Installer:
