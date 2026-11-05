@@ -19,7 +19,7 @@ Set-Content -Path "dist/familytunnel-$Version-linux.tar.gz.sha256" -Value "$upda
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("familytunnel-stage-" + [guid]::NewGuid())
 try {
   New-Item -ItemType Directory -Force "$stage/familytunnel/dist" | Out-Null
-  Copy-Item install.sh,install-server.sh,install-client.sh,bootstrap.sh,purge.sh,README.md,TESTING.md -Destination "$stage/familytunnel"
+  Copy-Item install.sh,install-familytunnel.sh,install-server.sh,install-client.sh,bootstrap.sh,purge.sh,README.md,TESTING.md -Destination "$stage/familytunnel"
   Copy-Item systemd,scripts -Destination "$stage/familytunnel" -Recurse
   Copy-Item dist/familytunnel-linux-amd64,dist/familytunnel-linux-arm64,dist/SHA256SUMS -Destination "$stage/familytunnel/dist"
   tar -C $stage -czf "dist/familytunnel-$Version-install.tar.gz" familytunnel
