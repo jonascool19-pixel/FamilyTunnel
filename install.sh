@@ -3,6 +3,21 @@ set -Eeuo pipefail
 umask 077
 export DEBIAN_FRONTEND=noninteractive
 [[ $EUID == 0 ]] || { echo 'Bitte mit sudo bash install.sh starten.' >&2; exit 1; }
+if [[ -t 1 ]]; then
+ BLUE=$'\033[1;34m'; CYAN=$'\033[1;36m'; GREEN=$'\033[1;32m'; YELLOW=$'\033[1;33m'; RESET=$'\033[0m'
+else
+ BLUE=''; CYAN=''; GREEN=''; YELLOW=''; RESET=''
+fi
+step() { printf '\n%b==>%b %b%s%b\n' "$BLUE" "$RESET" "$CYAN" "$1" "$RESET"; }
+done_step() { printf '%b[OK]%b %s\n' "$GREEN" "$RESET" "$1"; }
+printf '%b\n' "$CYAN"
+echo '  +==================================================================+'
+echo '  |                                                                  |'
+echo '  |                    FAMILYTUNNEL INSTALLATION                     |'
+echo '  |               Server und Client · Ubuntu 24.04                  |'
+echo '  |                                                                  |'
+echo '  +==================================================================+'
+printf '%b' "$RESET"
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 STATE=/var/lib/familytunnel
 exec 9>/run/lock/familytunnel.lock
@@ -14,15 +29,19 @@ arch=$(dpkg --print-architecture)
 [[ $arch == amd64 || $arch == arm64 ]] || { echo 'Nur amd64 und arm64 unterstützt.' >&2; exit 1; }
 [[ -f $ROOT/dist/familytunnel-linux-$arch ]] || { echo 'Release-Binary fehlt; zuerst scripts/build.sh ausführen.' >&2; exit 1; }
 (cd "$ROOT/dist" && sha256sum --check SHA256SUMS)
-echo 'Ubuntu und benötigte Pakete werden aktualisiert.'
+done_step 'Release und Prüfsummen wurden verifiziert.'
+step 'Ubuntu aktualisieren und benötigte Pakete installieren'
 apt-get update
 apt-get -y upgrade
 apt-get install -y ca-certificates curl jq wireguard-tools iproute2 iptables sqlite3 openssl python3 util-linux
+done_step 'Ubuntu und Pakete sind bereit.'
 # Do not enable nesting or weaken an unprivileged CT. Probe kernel support instead.
+step 'WireGuard-Unterstützung prüfen'
 if ! ip link show ft0 >/dev/null 2>&1; then
  ip link add ft-probe type wireguard || { echo 'WireGuard im CT nicht verfügbar. Proxmox-Host: WireGuard-Kernelmodul und CT-Netzwerkrechte prüfen. Kein automatisches Privilegieren.' >&2; exit 1; }
  ip link delete ft-probe
 fi
+done_step 'WireGuard ist verfügbar.'
 install -d -m 700 "$STATE" /etc/wireguard
 if [[ -f $STATE/config.json ]]; then
  role=$(jq -er .role "$STATE/config.json")
@@ -42,6 +61,7 @@ else
   esac
  fi
  [[ $role == server || $role == client ]] || { echo 'Ungültige Rolle.' >&2; exit 1; }
+ step "Rolle $role konfigurieren"
  if [[ $role == server ]]; then
   public_ip=${FT_PUBLIC_IP:-};if [[ -z $public_ip ]]; then read -rp 'Öffentliche IPv4 der Oracle-VM: ' public_ip </dev/tty; fi
   python3 - "$public_ip" <<'PY'
@@ -128,6 +148,7 @@ EOF
  jq -n --arg role "$role" --arg listen "$listen" --arg data_listen "$data_listen" --arg token "$token" --arg public_ip "$public_ip" '{role:$role,listen:$listen,data_listen:$data_listen,token:$token,public_ip:$public_ip,server_url:"http://10.77.0.1:9081",caddy_url:"http://127.0.0.1:2019"}' > "$STATE/config.json"
 fi
 if [[ $role == server ]]; then
+ step 'Caddy als öffentlichen HTTPS-Endpunkt einrichten'
  apt-get install -y caddy
  # Dedicated Caddy instance only; never overwrite an existing non-FamilyTunnel setup.
  if [[ -s /etc/caddy/Caddyfile ]] && ! grep -q 'FamilyTunnel' /etc/caddy/Caddyfile && systemctl is-active --quiet caddy; then
@@ -144,7 +165,9 @@ if [[ $role == server ]]; then
 EOF
  install -d /etc/systemd/system/caddy.service.d
  printf '[Service]\nRestart=on-failure\nRestartSec=5s\n' > /etc/systemd/system/caddy.service.d/familytunnel.conf
+ done_step 'Caddy ist eingerichtet.'
 fi
+step 'FamilyTunnel-Controller und Systemdienste installieren'
 install -d -m 755 /opt/familytunnel/releases/0.1.0 /usr/local/lib/familytunnel
 install -m 755 "$ROOT/dist/familytunnel-linux-$arch" /opt/familytunnel/releases/0.1.0/familytunnel
 install -m 755 "$ROOT/scripts/manage.sh" "$ROOT/scripts/firewall.sh" "$ROOT/scripts/oci-nsg.py" /usr/local/lib/familytunnel/
@@ -159,11 +182,14 @@ systemctl enable --now familytunnel-firewall
 if [[ $role == server ]]; then systemctl enable --now caddy;systemctl restart caddy;fi
 systemctl enable --now familytunnel familytunnel-repair.timer
 systemctl restart familytunnel
+done_step 'Systemdienste wurden gestartet.'
+step 'Abschließende Selbsttests ausführen'
 familytunnel selftest
 sleep 2
 systemctl is-active --quiet familytunnel
 [[ -s $STATE/admin.crt && -s $STATE/state.db ]]
 sqlite3 "$STATE/state.db" 'PRAGMA integrity_check;' | grep -qx ok
+done_step 'Alle Selbsttests waren erfolgreich.'
 admin_url="https://$(jq -r .listen "$STATE/config.json")"
 initial_password=""
 if [[ -s $STATE/initial-password ]]; then initial_password=$(tr -d '\r\n' < "$STATE/initial-password"); fi
