@@ -6,11 +6,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/crypto/argon2"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/argon2"
 )
 
 func hashPassword(p string) string {
@@ -41,10 +44,11 @@ type auth struct {
 	attempts map[string]attempt
 	hashing  chan struct{}
 	db       *sql.DB
+	dir      string
 }
 
-func newAuth(db *sql.DB) *auth {
-	return &auth{sessions: map[string]session{}, attempts: map[string]attempt{}, hashing: make(chan struct{}, 1), db: db}
+func newAuth(db *sql.DB, dir string) *auth {
+	return &auth{sessions: map[string]session{}, attempts: map[string]attempt{}, hashing: make(chan struct{}, 1), db: db, dir: dir}
 }
 func jsonOut(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -180,6 +184,7 @@ func (a *auth) password(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	a.sessions = map[string]session{}
 	a.mu.Unlock()
+	_ = os.Remove(filepath.Join(a.dir, "initial-password"))
 	jsonOut(w, 200, map[string]string{"message": "password changed; log in again"})
 }
 func bearer(token string, next http.HandlerFunc) http.HandlerFunc {
