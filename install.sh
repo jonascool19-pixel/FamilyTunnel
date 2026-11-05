@@ -153,9 +153,10 @@ sleep 2
 systemctl is-active --quiet familytunnel
 [[ -s $STATE/admin.crt && -s $STATE/state.db ]]
 sqlite3 "$STATE/state.db" 'PRAGMA integrity_check;' | grep -qx ok
-echo "Installation abgeschlossen. Verwaltung: https://$(jq -r .listen "$STATE/config.json")"
-echo "Benutzer: admin. Initialpasswort: sudo cat $STATE/initial-password"
-openssl x509 -in "$STATE/admin.crt" -noout -fingerprint -sha256
+admin_url="https://$(jq -r .listen "$STATE/config.json")"
+initial_password=""
+if [[ -s $STATE/initial-password ]]; then initial_password=$(tr -d '\r\n' < "$STATE/initial-password"); fi
+cert_fingerprint=$(openssl x509 -in "$STATE/admin.crt" -noout -fingerprint -sha256)
 if [[ $role == server ]];then
  echo
  echo '==================== PAIRING-CODE FÜR DEN HEIM-CT ===================='
@@ -168,5 +169,31 @@ if [[ $role == server ]];then
  echo "Die Quelldatei bleibt geschützt unter: $STATE/pairing.json"
  echo 'OCI: NSG muss der VM-VNIC zugewiesen sein. Automation: /usr/local/lib/familytunnel/oci-nsg.py NSG_OCID [VNIC_OCID]'
 fi
-if [[ -e /var/run/reboot-required ]];then echo 'Ubuntu empfiehlt einen Neustart. Er wird nicht ohne deine Kontrolle ausgelöst.';fi
-echo 'Tunnel und DNS sind erst nach Einrichtung beider Seiten und der OCI-Regeln prüfbar.'
+echo "$cert_fingerprint"
+
+if [[ -t 1 ]]; then
+ green=$'\033[1;32m'; cyan=$'\033[1;36m'; yellow=$'\033[1;33m'; reset=$'\033[0m'
+else
+ green=''; cyan=''; yellow=''; reset=''
+fi
+box_line() { printf '%b|%b %-68s %b|%b\n' "$cyan" "$reset" "$1" "$cyan" "$reset"; }
+echo
+printf '%b+----------------------------------------------------------------------+%b\n' "$cyan" "$reset"
+printf '%b|%b %b%-68s%b %b|%b\n' "$cyan" "$reset" "$green" 'FAMILYTUNNEL – INSTALLATION ERFOLGREICH' "$reset" "$cyan" "$reset"
+printf '%b+----------------------------------------------------------------------+%b\n' "$cyan" "$reset"
+if [[ $role == client ]]; then
+ box_line "Webseite erreichbar: $admin_url"
+else
+ box_line "Webseite intern nach CT-Verbindung: $admin_url"
+fi
+box_line 'Benutzername: admin'
+if [[ -n $initial_password ]]; then
+ box_line "Startpasswort: $initial_password"
+else
+ box_line 'Passwort: bereits geändert – vorhandenes Passwort verwenden'
+fi
+box_line "Rolle: $role"
+if [[ -e /var/run/reboot-required ]]; then
+ printf '%b|%b %b%-68s%b %b|%b\n' "$cyan" "$reset" "$yellow" 'Hinweis: Ubuntu empfiehlt einen kontrollierten Neustart.' "$reset" "$cyan" "$reset"
+fi
+printf '%b+----------------------------------------------------------------------+%b\n' "$cyan" "$reset"

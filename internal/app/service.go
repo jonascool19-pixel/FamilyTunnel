@@ -38,7 +38,7 @@ func newService(c Config) (*Service, error) {
 	if e != nil {
 		return nil, e
 	}
-	s := &Service{cfg: c, db: db, auth: newAuth(db), traffic: traffic{data: map[string]counters{}}, health: map[string]any{}, started: time.Now()}
+	s := &Service{cfg: c, db: db, auth: newAuth(db, c.Dir), traffic: traffic{data: map[string]counters{}}, health: map[string]any{}, started: time.Now()}
 	if e = initAdmin(db, c.Dir); e != nil {
 		db.Close()
 		return nil, e

@@ -71,6 +71,8 @@ Der Installer:
 
 Das Initialpasswort wird nur root-lesbar unter `/var/lib/familytunnel/initial-password` gespeichert. Nach der ersten Anmeldung sollte es geändert und die Datei gelöscht werden. Das selbstsignierte Zertifikat der internen Verwaltung wird mit SHA-256-Fingerabdruck angezeigt. Dieser Fingerabdruck muss vor einer Browser-Ausnahme geprüft werden.
 
+Nach erfolgreicher Installation erscheint ganz am Ende ein farbiger Abschlusskasten mit Webadresse, Benutzername `admin`, tatsächlichem Startpasswort und installierter Rolle. Nach einer Passwortänderung wird die Datei mit dem Startpasswort automatisch entfernt und bei späteren Reparaturinstallationen kein veraltetes Passwort angezeigt.
+
 ## Oracle NSG
 
 Wenn die OCI CLI eingerichtet und berechtigt ist:
