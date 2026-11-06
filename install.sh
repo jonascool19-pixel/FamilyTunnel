@@ -168,10 +168,17 @@ EOF
  done_step 'Caddy ist eingerichtet.'
 fi
 step 'FamilyTunnel-Controller und Systemdienste installieren'
-install -d -m 755 /opt/familytunnel/releases/0.1.0 /usr/local/lib/familytunnel
-install -m 755 "$ROOT/dist/familytunnel-linux-$arch" /opt/familytunnel/releases/0.1.0/familytunnel
+binary_hash=$(sha256sum "$ROOT/dist/familytunnel-linux-$arch" | awk '{print $1}')
+release_dir="/opt/familytunnel/releases/$binary_hash"
+install -d -m 755 "$release_dir" /usr/local/lib/familytunnel
+# Never overwrite a running executable (Linux rejects that with ETXTBSY).
+if [[ ! -f $release_dir/familytunnel ]]; then
+ install -m 755 "$ROOT/dist/familytunnel-linux-$arch" "$release_dir/familytunnel.new"
+ mv -Tf "$release_dir/familytunnel.new" "$release_dir/familytunnel"
+fi
+printf '%s  %s\n' "$binary_hash" "$release_dir/familytunnel" | sha256sum -c -
 install -m 755 "$ROOT/scripts/manage.sh" "$ROOT/scripts/firewall.sh" "$ROOT/scripts/oci-nsg.py" /usr/local/lib/familytunnel/
-ln -sfn /opt/familytunnel/releases/0.1.0 /opt/familytunnel/current.new
+ln -sfn "$release_dir" /opt/familytunnel/current.new
 mv -Tf /opt/familytunnel/current.new /opt/familytunnel/current
 ln -sfn /opt/familytunnel/current/familytunnel /usr/local/bin/familytunnel
 install -m 644 "$ROOT/systemd/"* /etc/systemd/system/
@@ -187,6 +194,10 @@ step 'Abschließende Selbsttests ausführen'
 familytunnel selftest
 sleep 2
 systemctl is-active --quiet familytunnel
+active_pid=$(systemctl show --property MainPID --value familytunnel)
+[[ $active_pid =~ ^[1-9][0-9]*$ ]]
+printf '%s  /proc/%s/exe\n' "$binary_hash" "$active_pid" | sha256sum -c -
+done_step "Aktiver Controller bestätigt: ${binary_hash:0:12}"
 [[ -s $STATE/admin.crt && -s $STATE/state.db ]]
 sqlite3 "$STATE/state.db" 'PRAGMA integrity_check;' | grep -qx ok
 done_step 'Alle Selbsttests waren erfolgreich.'
