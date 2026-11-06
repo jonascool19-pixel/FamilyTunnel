@@ -105,6 +105,14 @@ func (s *Service) proxy(w http.ResponseWriter, r *http.Request) {
 	u, _ := url.Parse(target.Backend)
 	p := httputil.NewSingleHostReverseProxy(u)
 	p.Transport = backendTransport
+	nonce := r.Header.Get("X-FamilyTunnel-Probe")
+	p.ModifyResponse = func(response *http.Response) error {
+		response.Header.Del("X-FamilyTunnel-Proof")
+		if len(nonce) == 43 {
+			response.Header.Set("X-FamilyTunnel-Proof", publicProof(s.cfg.Token, nonce, target.Domain))
+		}
+		return nil
+	}
 	original := p.Director
 	p.Director = func(req *http.Request) {
 		original(req)
