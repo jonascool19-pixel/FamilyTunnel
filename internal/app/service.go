@@ -182,13 +182,13 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "use collection URL")
 			return
 		}
-		result, e = s.db.Exec("INSERT INTO routes(domain,backend,enabled) VALUES(?,?,?)", v.Domain, v.Backend, v.Enabled)
+		result, e = s.db.Exec("INSERT INTO routes(domain,backend,enabled,public_port) VALUES(?,?,?,?)", v.Domain, v.Backend, v.Enabled, v.port())
 	case "PUT":
 		if id == 0 {
 			fail(w, 400, "route id required")
 			return
 		}
-		result, e = s.db.Exec("UPDATE routes SET domain=?,backend=?,enabled=? WHERE id=?", v.Domain, v.Backend, v.Enabled, id)
+		result, e = s.db.Exec("UPDATE routes SET domain=?,backend=?,enabled=?,public_port=? WHERE id=?", v.Domain, v.Backend, v.Enabled, v.port(), id)
 	case "DELETE":
 		if id == 0 {
 			fail(w, 400, "route id required")
@@ -200,7 +200,7 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if e != nil {
-		fail(w, 409, "change could not be saved; domain must be unique")
+		fail(w, 409, "Diese Kombination aus Domain und öffentlichem Port ist bereits belegt oder konnte nicht gespeichert werden")
 		return
 	}
 	n, _ := result.RowsAffected()
@@ -211,14 +211,16 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 	event(s.db, "route", "route configuration changed")
 	syncErr := s.syncRoutes()
 	if syncErr != nil {
-		jsonOut(w, 202, map[string]string{"message": "saved locally; server sync pending"})
+		jsonOut(w, 202, map[string]string{"message": "Lokal gespeichert. Übertragung an Oracle ausstehend: " + syncErr.Error()})
 		return
 	}
 	jsonOut(w, 200, map[string]bool{"ok": true})
 }
 func (s *Service) internalHandlers() http.Handler {
 	m := http.NewServeMux()
-	m.HandleFunc("/internal/health", bearer(s.cfg.Token, func(w http.ResponseWriter, r *http.Request) { jsonOut(w, 200, map[string]bool{"ok": true}) }))
+	m.HandleFunc("/internal/health", bearer(s.cfg.Token, func(w http.ResponseWriter, r *http.Request) {
+		jsonOut(w, 200, map[string]bool{"ok": true, "route_ports_v1": true})
+	}))
 	m.HandleFunc("/internal/routes", bearer(s.cfg.Token, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			fail(w, 405, "POST required")
@@ -253,6 +255,13 @@ func (s *Service) internalHandlers() http.Handler {
 		if e = replaceRoutes(s.db, rs); e != nil {
 			_ = s.applyCaddy(old)
 			fail(w, 500, "persist failed")
+			return
+		}
+		if e = exec.CommandContext(r.Context(), "/usr/local/lib/familytunnel/firewall.sh", "apply").Run(); e != nil {
+			_ = replaceRoutes(s.db, old)
+			_ = s.applyCaddy(old)
+			_ = exec.Command("/usr/local/lib/familytunnel/firewall.sh", "apply").Run()
+			fail(w, 503, "Server-Firewall konnte die öffentlichen Ports nicht übernehmen")
 			return
 		}
 		jsonOut(w, 200, map[string]bool{"ok": true})
@@ -315,7 +324,7 @@ func (s *Service) checkHealth(ctx context.Context) {
 		if s.cfg.Role == "client" {
 			v["backend"] = backendCheck(ctx, r)
 		}
-		checks[r.Domain] = v
+		checks[r.address()] = v
 	}
 	h["services"] = checks
 	for _, p := range []string{"/proc/loadavg", "/proc/meminfo"} {

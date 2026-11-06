@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -88,8 +89,15 @@ func (s *Service) proxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var target *Route
+	publicPort := 443
+	// Caddy overwrites this header on every site. The proxy only accepts the VPS peer.
+	if port := r.Header.Get("X-FamilyTunnel-Port"); port != "" {
+		publicPort, _ = strconv.Atoi(port)
+	} else if _, port, err := net.SplitHostPort(r.Host); err == nil {
+		publicPort, _ = strconv.Atoi(port)
+	}
 	for i := range rs {
-		if rs[i].Enabled && rs[i].Domain == strings.ToLower(hostOnly(r.Host)) {
+		if rs[i].Enabled && rs[i].Domain == strings.ToLower(hostOnly(r.Host)) && rs[i].port() == publicPort {
 			target = &rs[i]
 			break
 		}
@@ -109,7 +117,7 @@ func (s *Service) proxy(w http.ResponseWriter, r *http.Request) {
 	p.ModifyResponse = func(response *http.Response) error {
 		response.Header.Del("X-FamilyTunnel-Proof")
 		if len(nonce) == 43 {
-			response.Header.Set("X-FamilyTunnel-Proof", publicProof(s.cfg.Token, nonce, target.Domain))
+			response.Header.Set("X-FamilyTunnel-Proof", publicProof(s.cfg.Token, nonce, target.address()))
 		}
 		return nil
 	}
@@ -121,7 +129,11 @@ func (s *Service) proxy(w http.ResponseWriter, r *http.Request) {
 		req.Header.Del("Forwarded")
 		req.Header.Del("X-Forwarded-For")
 		req.Header.Set("X-Forwarded-Proto", "https")
-		req.Host = target.Domain
+		req.Header.Set("X-Forwarded-Host", target.address())
+		req.Header.Set("X-Forwarded-Port", strconv.Itoa(target.port()))
+		req.Header.Del("X-FamilyTunnel-Port")
+		req.Header.Del("X-FamilyTunnel-Probe")
+		req.Host = target.address()
 	}
 	var rx atomic.Int64
 	if r.Body != nil {
@@ -136,7 +148,7 @@ func (s *Service) proxy(w http.ResponseWriter, r *http.Request) {
 	if mw.status >= 500 {
 		c.Errors = 1
 	}
-	s.traffic.add(target.Domain+"|"+time.Now().UTC().Truncate(time.Hour).Format(time.RFC3339), c)
+	s.traffic.add(target.address()+"|"+time.Now().UTC().Truncate(time.Hour).Format(time.RFC3339), c)
 }
 func caddyfile(rs []Route) string {
 	var b strings.Builder
@@ -147,7 +159,7 @@ func caddyfile(rs []Route) string {
 			continue
 		}
 		active++
-		fmt.Fprintf(&b, "%s {\n reverse_proxy 10.77.0.2:9080 {\n  transport http {\n   dial_timeout 5s\n   response_header_timeout 35s\n  }\n }\n log {\n  output discard\n }\n}\n", r.Domain)
+		fmt.Fprintf(&b, "https://%s {\n reverse_proxy 10.77.0.2:9080 {\n  header_up Host %s\n  header_up X-FamilyTunnel-Port %d\n  transport http {\n   dial_timeout 5s\n   response_header_timeout 35s\n  }\n }\n log {\n  output discard\n }\n}\n", r.address(), r.address(), r.port())
 	}
 	if active == 0 {
 		b.WriteString(":80 {\n respond \"FamilyTunnel: no services configured\" 404\n}\n")
@@ -180,6 +192,29 @@ func (s *Service) syncRoutes() error {
 	if e != nil {
 		return e
 	}
+	for _, route := range rs {
+		if route.port() == 443 {
+			continue
+		}
+		req, e := http.NewRequest("GET", s.cfg.ServerURL+"/internal/health", nil)
+		if e != nil {
+			return e
+		}
+		req.Header.Set("Authorization", "Bearer "+s.cfg.Token)
+		resp, e := controlHTTP.Do(req)
+		if e != nil {
+			return fmt.Errorf("Oracle-Server über WireGuard nicht erreichbar")
+		}
+		var capabilities struct {
+			RoutePorts bool `json:"route_ports_v1"`
+		}
+		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&capabilities)
+		resp.Body.Close()
+		if resp.StatusCode != 200 || decodeErr != nil || !capabilities.RoutePorts {
+			return fmt.Errorf("Zuerst den Oracle-Server aktualisieren: Unterstützung für öffentliche Ports fehlt")
+		}
+		break
+	}
 	b, _ := json.Marshal(rs)
 	req, e := http.NewRequest("POST", s.cfg.ServerURL+"/internal/routes", bytes.NewReader(b))
 	if e != nil {
@@ -192,7 +227,11 @@ func (s *Service) syncRoutes() error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("server sync failed (%d)", resp.StatusCode)
+		var detail struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&detail)
+		return fmt.Errorf("server sync failed (%d): %s", resp.StatusCode, detail.Error)
 	}
 	return nil
 }
