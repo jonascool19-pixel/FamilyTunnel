@@ -14,15 +14,36 @@ import (
 )
 
 type Route struct {
-	ID      int64  `json:"id"`
-	Domain  string `json:"domain"`
-	Backend string `json:"backend"`
-	Enabled bool   `json:"enabled"`
+	ID         int64  `json:"id"`
+	Domain     string `json:"domain"`
+	Backend    string `json:"backend"`
+	Enabled    bool   `json:"enabled"`
+	PublicPort int    `json:"public_port"`
+}
+
+func (r Route) port() int {
+	if r.PublicPort == 0 {
+		return 443
+	}
+	return r.PublicPort
+}
+func (r Route) address() string {
+	if r.port() == 443 {
+		return r.Domain
+	}
+	return net.JoinHostPort(r.Domain, strconv.Itoa(r.port()))
+}
+func (r Route) validPort() bool {
+	p := r.port()
+	return p == 443 || (p >= 1024 && p <= 65535 && p != 2019 && p != 8443 && p != 9080 && p != 9081)
 }
 
 var domainRE = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
 
 func (r Route) validate() error {
+	if !r.validPort() {
+		return errors.New("Öffentlicher Port: 443 oder 1024–65535; 2019, 8443, 9080 und 9081 sind reserviert")
+	}
 	if len(r.Domain) > 253 || !domainRE.MatchString(r.Domain) {
 		return errors.New("invalid lowercase DNS domain")
 	}
@@ -60,10 +81,26 @@ func openDB(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, e
 	}
+	// Migrate the original domain-only table atomically; existing routes stay on HTTPS/443.
+	var hasPort int
+	e = db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('routes') WHERE name='public_port'").Scan(&hasPort)
+	if e == nil && hasPort == 0 {
+		_, e = db.Exec(`BEGIN IMMEDIATE;
+CREATE TABLE routes_ports(id INTEGER PRIMARY KEY,domain TEXT NOT NULL,backend TEXT NOT NULL,enabled INTEGER NOT NULL,public_port INTEGER NOT NULL DEFAULT 443,UNIQUE(domain,public_port));
+INSERT INTO routes_ports(id,domain,backend,enabled) SELECT id,domain,backend,enabled FROM routes;
+DROP TABLE routes;
+ALTER TABLE routes_ports RENAME TO routes;
+COMMIT;`)
+	}
+	if e != nil {
+		db.Exec("ROLLBACK")
+		db.Close()
+		return nil, e
+	}
 	return db, nil
 }
 func routes(db *sql.DB) ([]Route, error) {
-	rows, e := db.Query("SELECT id,domain,backend,enabled FROM routes ORDER BY id")
+	rows, e := db.Query("SELECT id,domain,backend,enabled,public_port FROM routes ORDER BY id")
 	if e != nil {
 		return nil, e
 	}
@@ -71,7 +108,7 @@ func routes(db *sql.DB) ([]Route, error) {
 	out := []Route{}
 	for rows.Next() {
 		var r Route
-		if e = rows.Scan(&r.ID, &r.Domain, &r.Backend, &r.Enabled); e != nil {
+		if e = rows.Scan(&r.ID, &r.Domain, &r.Backend, &r.Enabled, &r.PublicPort); e != nil {
 			return nil, e
 		}
 		out = append(out, r)
@@ -129,10 +166,10 @@ func replaceRoutes(db *sql.DB, rs []Route) error {
 		if e := r.validate(); e != nil {
 			return e
 		}
-		if seen[r.Domain] {
-			return errors.New("duplicate domain")
+		if seen[r.address()] {
+			return errors.New("duplicate domain and public port")
 		}
-		seen[r.Domain] = true
+		seen[r.address()] = true
 	}
 	tx, e := db.Begin()
 	if e != nil {
@@ -143,7 +180,7 @@ func replaceRoutes(db *sql.DB, rs []Route) error {
 		return e
 	}
 	for _, r := range rs {
-		if _, e = tx.Exec("INSERT INTO routes(id,domain,backend,enabled) VALUES(?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled); e != nil {
+		if _, e = tx.Exec("INSERT INTO routes(id,domain,backend,enabled,public_port) VALUES(?,?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled, r.port()); e != nil {
 			return e
 		}
 	}

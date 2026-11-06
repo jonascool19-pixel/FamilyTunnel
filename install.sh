@@ -168,6 +168,13 @@ EOF
  done_step 'Caddy ist eingerichtet.'
 fi
 step 'FamilyTunnel-Controller und Systemdienste installieren'
+if [[ -s $STATE/state.db ]]; then
+ install -d -m 700 /var/backups/familytunnel
+ db_backup="/var/backups/familytunnel/pre-install-$(date -u +%Y%m%dT%H%M%S)-$$.db"
+ sqlite3 "$STATE/state.db" ".backup '$db_backup'"
+ chmod 600 "$db_backup"
+ done_step "Datenbank vor der Aktualisierung gesichert: $db_backup"
+fi
 binary_hash=$(sha256sum "$ROOT/dist/familytunnel-linux-$arch" | awk '{print $1}')
 release_dir="/opt/familytunnel/releases/$binary_hash"
 install -d -m 755 "$release_dir" /usr/local/lib/familytunnel

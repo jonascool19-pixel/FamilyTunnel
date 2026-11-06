@@ -2,6 +2,20 @@
 
 FamilyTunnel veröffentlicht HTTP-Dienste aus einem Heimnetz über eine Oracle-Cloud-VM. Ein Ubuntu-24.04-LXC baut den WireGuard-Tunnel ausgehend auf; am Heimrouter ist keine Portfreigabe nötig. Caddy auf dem VPS beendet TLS und sendet Anfragen durch den Tunnel an den Controller im CT, der sie an private Heimnetz-Adressen weiterleitet.
 
+## Eine Domain, mehrere HTTPS-Ports
+
+Mehrere Webdienste können dieselbe Domain verwenden. Jede Weiterleitung hat einen eigenen `public_port`; Domain und öffentlicher Port müssen zusammen eindeutig sein. Beispiel: `https://mein-zugang.example.net:8096/` leitet nach `http://192.168.1.30:8096`, während `https://mein-zugang.example.net:8123/` auf einen anderen Heimdienst zeigt. Öffentlicher und interner Port dürfen unterschiedlich sein. Die Hauptadresse ohne Port verwendet weiterhin 443.
+
+Die Heimnetzsuche schlägt den gefundenen Port vor. Für niedrige oder reservierte Ports wird 443 vorgeschlagen. Jeder Dienst wird einzeln veröffentlicht; die Oberfläche zeigt seine fertige HTTPS-Adresse. Unterstützt: 443 oder 1024–65535, ausgenommen die internen Ports 2019, 8443, 9080 und 9081. Dies sind HTTPS-Weiterleitungen für Webdienste, keine beliebigen TCP-/UDP-Tunnel. Die bestehende Einschränkung für WebSockets bleibt bestehen.
+
+**Aktualisierung:** zuerst Oracle-Server, danach Heim-CT mit dem Installer aktualisieren. Die Rolle wird aus der bestehenden Konfiguration übernommen. Der Installer sichert die vorhandene Datenbank nach `/var/backups/familytunnel/pre-install-*.db`; die Migration übernimmt bestehende Weiterleitungen unverändert auf Port 443. Ein alter Server wird vor der Synchronisierung zusätzlicher Ports erkannt und muss zuerst aktualisiert werden.
+
+Die Ubuntu-Firewall auf Oracle übernimmt ausschließlich die aktiven veröffentlichten TCP-Ports und entfernt deren FamilyTunnel-Freigabe beim Deaktivieren/Löschen. **In der OCI-Sicherheitsliste oder einer zugewiesenen NSG muss jeder zusätzliche öffentliche TCP-Port ebenfalls freigegeben werden.** Beispiel: Quelle `0.0.0.0/0`, Protokoll TCP, Quellports alle, Zielport 8096, zustandsbehaftet. OCI-Regeln werden nicht automatisch geändert. 80/TCP muss für die Zertifikatsausstellung erreichbar bleiben; 443/TCP und 51820/UDP bleiben wie bisher freigegeben.
+
+„Öffentlich testen“ prüft den ausgewählten Port über TLS mit Zertifikatsprüfung und verlangt eine an Domain und Port gebundene Antwortbestätigung des Heim-Controllers. Die Prüfung startet vom CT über die öffentliche Oracle-IP; sie ist kein Test aus allen externen Netzen.
+
+Porttests: `node scripts/test-web.cjs` und `go test ./...`. Mit gesetztem `CADDY_BIN` wird zusätzlich die echte Caddy-Konfigurationsumwandlung geprüft.
+
 ## Voraussetzungen
 
 - Oracle Ubuntu 24.04 VM mit öffentlicher IPv4 und bestehendem NSG

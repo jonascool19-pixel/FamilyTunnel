@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -27,10 +28,16 @@ func (s *Service) publicTestAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Domain string `json:"domain"`
+		Domain     string `json:"domain"`
+		PublicPort int    `json:"public_port"`
 	}
 	if decode(w, r, &input) != nil || !domainRE.MatchString(input.Domain) {
 		fail(w, 400, "Ungültige Domain")
+		return
+	}
+	target := Route{Domain: input.Domain, PublicPort: input.PublicPort}
+	if !target.validPort() {
+		fail(w, 400, "Ungültiger öffentlicher Port")
 		return
 	}
 	rs, err := routes(s.db)
@@ -40,7 +47,7 @@ func (s *Service) publicTestAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	enabled := false
 	for _, route := range rs {
-		if route.Domain == input.Domain && route.Enabled {
+		if route.Domain == input.Domain && route.port() == target.port() && route.Enabled {
 			enabled = true
 		}
 	}
@@ -52,7 +59,7 @@ func (s *Service) publicTestAPI(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	result := map[string]any{"reachable": false, "message": ""}
 	defer func() {
-		event(s.db, "public-test", input.Domain+": "+result["message"].(string))
+		event(s.db, "public-test", target.address()+": "+result["message"].(string))
 		jsonOut(w, 200, result)
 	}()
 	ips, err := net.DefaultResolver.LookupHost(ctx, input.Domain)
@@ -72,20 +79,20 @@ func (s *Service) publicTestAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	transport := &http.Transport{Proxy: nil, DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort(s.cfg.PublicIP, "443"))
+		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort(s.cfg.PublicIP, strconv.Itoa(target.port())))
 	}, TLSHandshakeTimeout: 5 * time.Second}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	nonce := random(32)
-	req, _ := http.NewRequestWithContext(ctx, "GET", "https://"+input.Domain+"/", nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://"+target.address()+"/", nil)
 	req.Header.Set("X-FamilyTunnel-Probe", nonce)
 	response, err := client.Do(req)
 	if err != nil {
-		result["message"] = "Öffentlicher HTTPS-Test fehlgeschlagen (Port 443, Firewall oder Zertifikat): " + err.Error()
+		result["message"] = fmt.Sprintf("Öffentlicher HTTPS-Test fehlgeschlagen (TCP-Port %d auch in Oracle freigeben; Firewall oder Zertifikat prüfen): %s", target.port(), err.Error())
 		return
 	}
 	defer response.Body.Close()
-	if !hmac.Equal([]byte(response.Header.Get("X-FamilyTunnel-Proof")), []byte(publicProof(s.cfg.Token, nonce, input.Domain))) {
+	if !hmac.Equal([]byte(response.Header.Get("X-FamilyTunnel-Proof")), []byte(publicProof(s.cfg.Token, nonce, target.address()))) {
 		result["message"] = fmt.Sprintf("HTTPS antwortet mit HTTP %d, aber der Weg über den Tunnel zum Heimdienst ist nicht bestätigt.", response.StatusCode)
 		return
 	}

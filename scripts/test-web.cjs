@@ -10,6 +10,7 @@ class Element {
 const elements=new Map(),storage=new Map(),calls=[];
 let failTest=false,existing=[];
 const context=vm.createContext({
+  URL,
   document:{getElementById(id){if(!elements.has(id))elements.set(id,new Element());return elements.get(id)},createElement(){return new Element()}},
   localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},
   setInterval(){},confirm(){return true},
@@ -48,6 +49,20 @@ async function run(){
   await actions.children[2].onclick();
   assert.ok(calls.some(call=>call.path==='/api/routes/7'&&call.options.method==='PUT'));
   assert.equal(JSON.parse(storage.get('ft-last-discovery')).services.length,0);
+  const multiple={domain:'test.example.net',services:[{name:'Media',backend:'http://192.168.1.30:8096',port:8096},{name:'Home',backend:'http://192.168.1.40:8123',port:8123}]};
+  context.input=multiple;
+  vm.runInContext('renderDiscovery(input)',context);
+  const multiCards=elements.get('discovered').children;
+  assert.equal(Number(multiCards[0].children[2].children[2].value),8096);
+  assert.equal(Number(multiCards[1].children[2].children[2].value),8123);
+  assert.match(multiCards[0].children[2].children[3].textContent,/:8096\//);
+  existing=[{id:7,domain:'test.example.net',backend:'http://192.168.1.40:80',public_port:443}];
+  await multiCards[0].children[4].children[2].onclick();
+  const publishes=calls.filter(call=>call.path==='/api/routes'&&call.options.method==='POST');
+  assert.equal(JSON.parse(publishes.at(-1).options.body).public_port,8096,'New port must create a new route, not replace root');
+  vm.runInContext('renderDiscovery(input)',context);
+  await elements.get('discovered').children[0].children[4].children[1].onclick();
+  assert.equal(JSON.parse(calls.filter(call=>call.path==='/api/public-test').at(-1).options.body).public_port,8123);
   assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
   console.log('Web callbacks: CT test, inline errors and existing-domain publication passed.');
 }
