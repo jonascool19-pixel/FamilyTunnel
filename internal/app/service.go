@@ -73,6 +73,7 @@ func (s *Service) handlers() http.Handler {
 	m.HandleFunc("/api/routes/", s.auth.protect(s.routeAPI))
 	m.HandleFunc("/api/discover", s.auth.protect(s.discoveryAPI))
 	m.HandleFunc("/api/backend-test", s.auth.protect(s.backendTestAPI))
+	m.HandleFunc("/api/public-test", s.auth.protect(s.publicTestAPI))
 	m.HandleFunc("/api/status", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			fail(w, 405, "GET required")

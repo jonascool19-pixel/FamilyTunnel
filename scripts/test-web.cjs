@@ -45,7 +45,7 @@ async function run(){
   assert.equal(actions.children[0].disabled,false);
   assert.equal(actions.children[0].textContent,'Erneut testen');
   existing=[{id:7,domain:'test.example.net',backend:'http://192.168.1.40:80'}];
-  await actions.children[1].onclick();
+  await actions.children[2].onclick();
   assert.ok(calls.some(call=>call.path==='/api/routes/7'&&call.options.method==='PUT'));
   assert.equal(JSON.parse(storage.get('ft-last-discovery')).services.length,0);
   assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
