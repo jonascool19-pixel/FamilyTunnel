@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-STATE=/var/lib/familytunnel
+STATE=${FT_STATE:-/var/lib/familytunnel}
 exec 8>/run/lock/familytunnel-firewall.lock
 flock -w 10 8
 if [[ ${1:-apply} == remove ]];then
+ [[ ! -f $(dirname "$0")/raw-firewall.sh ]] || bash "$(dirname "$0")/raw-firewall.sh" remove
  while iptables -w -C INPUT -j FAMILYTUNNEL 2>/dev/null;do iptables -w -D INPUT -j FAMILYTUNNEL;done
  iptables -w -F FAMILYTUNNEL 2>/dev/null || true
  iptables -w -X FAMILYTUNNEL 2>/dev/null || true
@@ -32,3 +33,4 @@ iptables -w -A FAMILYTUNNEL -p tcp -m multiport --dports 8443,9080,9081,2019 -j 
 iptables -w -A FAMILYTUNNEL -j RETURN
 iptables -w -C INPUT -j FAMILYTUNNEL 2>/dev/null || iptables -w -I INPUT 1 -j FAMILYTUNNEL
 # Existing SSH policy and Oracle metadata/storage rules remain untouched.
+bash "$(dirname "$0")/raw-firewall.sh" apply

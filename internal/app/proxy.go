@@ -188,50 +188,70 @@ func (s *Service) applyCaddy(rs []Route) error {
 	return nil
 }
 func (s *Service) syncRoutes() error {
-	rs, e := routes(s.db)
-	if e != nil {
-		return e
+	web, err := routes(s.db)
+	if err != nil {
+		return err
 	}
-	for _, route := range rs {
-		if route.port() == 443 {
-			continue
-		}
-		req, e := http.NewRequest("GET", s.cfg.ServerURL+"/internal/health", nil)
-		if e != nil {
-			return e
-		}
-		req.Header.Set("Authorization", "Bearer "+s.cfg.Token)
-		resp, e := controlHTTP.Do(req)
-		if e != nil {
-			return fmt.Errorf("Oracle-Server über WireGuard nicht erreichbar")
-		}
-		var capabilities struct {
-			RoutePorts bool `json:"route_ports_v1"`
-		}
-		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&capabilities)
-		resp.Body.Close()
-		if resp.StatusCode != 200 || decodeErr != nil || !capabilities.RoutePorts {
-			return fmt.Errorf("Zuerst den Oracle-Server aktualisieren: Unterstützung für öffentliche Ports fehlt")
-		}
-		break
+	ports, err := portForwards(s.db)
+	if err != nil {
+		return err
 	}
-	b, _ := json.Marshal(rs)
-	req, e := http.NewRequest("POST", s.cfg.ServerURL+"/internal/routes", bytes.NewReader(b))
-	if e != nil {
-		return e
+	if err = validateForwardSet(web, ports); err != nil {
+		return err
+	}
+	req, err := http.NewRequest("GET", s.cfg.ServerURL+"/internal/health", nil)
+	if err != nil {
+		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+s.cfg.Token)
-	resp, e := controlHTTP.Do(req)
-	if e != nil {
-		return fmt.Errorf("server unreachable over WireGuard")
+	response, err := controlHTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("Oracle-Server über WireGuard nicht erreichbar")
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		var detail struct {
-			Error string `json:"error"`
+	var capabilities struct {
+		WebPorts bool `json:"route_ports_v1"`
+		RawPorts bool `json:"raw_ports_v1"`
+	}
+	err = json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&capabilities)
+	response.Body.Close()
+	if response.StatusCode != 200 || err != nil {
+		return fmt.Errorf("Oracle-Authentifizierung oder Gesundheitsprüfung fehlgeschlagen")
+	}
+	endpoint := "/internal/routes"
+	var payload any = web
+	if capabilities.RawPorts {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err = s.applyPortFirewall(ctx)
+		cancel()
+		if err != nil {
+			return err
 		}
-		_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&detail)
-		return fmt.Errorf("server sync failed (%d): %s", resp.StatusCode, detail.Error)
+		endpoint = "/internal/config"
+		payload = map[string]any{"web": web, "ports": ports}
+	} else {
+		if len(ports) > 0 {
+			return fmt.Errorf("Zuerst Oracle aktualisieren: TCP/UDP-Unterstützung fehlt")
+		}
+		for _, route := range web {
+			if route.port() != 443 && !capabilities.WebPorts {
+				return fmt.Errorf("Zuerst Oracle aktualisieren: öffentliche Ports fehlen")
+			}
+		}
+	}
+	body, _ := json.Marshal(payload)
+	req, err = http.NewRequest("POST", s.cfg.ServerURL+endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+	response, err = controlHTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("Oracle-Übertragung über WireGuard fehlgeschlagen")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != 200 {
+		return decodeSyncError(response)
 	}
 	return nil
 }

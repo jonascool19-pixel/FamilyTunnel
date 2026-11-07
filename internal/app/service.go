@@ -23,17 +23,20 @@ import (
 var web embed.FS
 
 type Service struct {
-	cfg          Config
-	db           *sql.DB
-	auth         *auth
-	traffic      traffic
-	mu           sync.Mutex
-	healthMu     sync.RWMutex
-	health       map[string]any
-	started      time.Time
-	discoveryMu  sync.Mutex
-	routeMu      sync.Mutex
-	routeChanges chan struct{}
+	cfg           Config
+	db            *sql.DB
+	auth          *auth
+	traffic       traffic
+	mu            sync.Mutex
+	healthMu      sync.RWMutex
+	health        map[string]any
+	started       time.Time
+	discoveryMu   sync.Mutex
+	routeMu       sync.Mutex
+	routeChanges  chan struct{}
+	firewallApply func(context.Context) error
+	scanMu        sync.Mutex
+	scan          *scanJob
 }
 
 func newService(c Config) (*Service, error) {
@@ -47,6 +50,13 @@ func newService(c Config) (*Service, error) {
 		return nil, e
 	}
 	s.routeChanges = make(chan struct{}, 1)
+	s.firewallApply = func(ctx context.Context) error {
+		output, err := exec.CommandContext(ctx, "/usr/local/lib/familytunnel/firewall.sh", "apply").CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("Host-Firewall/IP-Weiterleitung fehlgeschlagen: %s", strings.TrimSpace(string(output)))
+		}
+		return nil
+	}
 	return s, nil
 }
 func (s *Service) handlers() http.Handler {
@@ -75,6 +85,10 @@ func (s *Service) handlers() http.Handler {
 	m.HandleFunc("/api/routes", s.auth.protect(s.routeAPI))
 	m.HandleFunc("/api/routes/", s.auth.protect(s.routeAPI))
 	m.HandleFunc("/api/discover", s.auth.protect(s.discoveryAPI))
+	m.HandleFunc("/api/ports", s.auth.protect(s.portAPI))
+	m.HandleFunc("/api/ports/", s.auth.protect(s.portAPI))
+	m.HandleFunc("/api/scan", s.auth.protect(s.scanAPI))
+	m.HandleFunc("/api/cloud", s.auth.protect(s.cloudAPI))
 	m.HandleFunc("/api/backend-test", s.auth.protect(s.backendTestAPI))
 	m.HandleFunc("/api/public-test", s.auth.protect(s.publicTestAPI))
 	m.HandleFunc("/api/status", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +191,19 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, e.Error())
 			return
 		}
+		ports, err := portForwards(s.db)
+		if err != nil {
+			fail(w, 500, "Datenbank nicht verfügbar")
+			return
+		}
+		if v.Enabled {
+			for _, p := range ports {
+				if p.Enabled && p.Protocol == "tcp" && p.PublicPort == v.port() {
+					fail(w, 409, "Dieser TCP-Port wird bereits als direkte TCP-Freigabe verwendet")
+					return
+				}
+			}
+		}
 	}
 	var result sql.Result
 	switch r.Method {
@@ -226,8 +253,10 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 func (s *Service) internalHandlers() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("/internal/health", bearer(s.cfg.Token, func(w http.ResponseWriter, r *http.Request) {
-		jsonOut(w, 200, map[string]bool{"ok": true, "route_ports_v1": true})
+		jsonOut(w, 200, map[string]bool{"ok": true, "route_ports_v1": true, "raw_ports_v1": true})
 	}))
+	m.HandleFunc("/internal/config", bearer(s.cfg.Token, s.configAPI))
+	m.HandleFunc("/internal/cloud", bearer(s.cfg.Token, s.cloudAPI))
 	m.HandleFunc("/internal/routes", bearer(s.cfg.Token, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			fail(w, 405, "POST required")
@@ -250,6 +279,15 @@ func (s *Service) internalHandlers() http.Handler {
 		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		ps, err := portForwards(s.db)
+		if err != nil {
+			fail(w, 500, "Datenbank nicht verfügbar")
+			return
+		}
+		if err = validateForwardSet(rs, ps); err != nil {
+			fail(w, 409, err.Error())
+			return
+		}
 		old, e := routes(s.db)
 		if e != nil {
 			fail(w, 500, "database unavailable")
@@ -264,10 +302,10 @@ func (s *Service) internalHandlers() http.Handler {
 			fail(w, 500, "persist failed")
 			return
 		}
-		if e = exec.CommandContext(r.Context(), "/usr/local/lib/familytunnel/firewall.sh", "apply").Run(); e != nil {
+		if e = s.applyPortFirewall(r.Context()); e != nil {
 			_ = replaceRoutes(s.db, old)
 			_ = s.applyCaddy(old)
-			_ = exec.Command("/usr/local/lib/familytunnel/firewall.sh", "apply").Run()
+			_ = s.applyPortFirewall(context.Background())
 			fail(w, 503, "Server-Firewall konnte die öffentlichen Ports nicht übernehmen")
 			return
 		}
@@ -432,5 +470,6 @@ func Run(args []string) error {
 		return e
 	}
 	defer s.db.Close()
+	defer s.stopScan()
 	return s.serve()
 }

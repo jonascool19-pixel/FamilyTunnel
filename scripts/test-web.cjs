@@ -4,16 +4,18 @@ const vm=require('node:vm');
 const assert=require('node:assert/strict');
 class Element {
   constructor(){this.children=[];this.hidden=true;this.value='';this.textContent='';}
+  set value(value){this._value=String(value)}
+  get value(){return this._value}
   append(...items){this.children.push(...items);}
   replaceChildren(...items){this.children=items;}
   scrollIntoView(){this.scrolled=true;}
   focus(){this.focused=true;}
 }
 const elements=new Map(),storage=new Map(),calls=[];
-let failTest=false,existing=[];
+let failTest=false,existing=[],rawExisting=[];
 const context=vm.createContext({
   URL,
-  document:{getElementById(id){if(!elements.has(id))elements.set(id,new Element());return elements.get(id)},createElement(){return new Element()}},
+  document:{getElementById(id){if(!elements.has(id))elements.set(id,new Element());return elements.get(id)},createElement(){return new Element()},querySelector(){return null},querySelectorAll(){return []}},
   localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},
   setInterval(){},confirm(){return true},
   fetch:async(path,options)=>{
@@ -21,6 +23,14 @@ const context=vm.createContext({
     if(path==='/api/session')return {ok:false,status:401,text:async()=>JSON.stringify({error:'login'})};
     if(path==='/api/backend-test')return {ok:!failTest,status:failTest?503:200,text:async()=>JSON.stringify(failTest?{error:'Testfehler'}:{reachable:true,message:'Vom CT erreichbar (TCP).'})};
     if(path==='/api/routes'&&options.method==='GET')return {ok:true,text:async()=>JSON.stringify(existing)};
+    if(path==='/api/ports/batch'&&options.method==='POST'){
+      rawExisting=JSON.parse(options.body).map((route,index)=>({...route,id:index+1}));
+      return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Portfreigaben gespeichert'})};
+    }
+    if(path==='/api/ports/1'&&options.method==='PUT'){
+      rawExisting[0]={...JSON.parse(options.body),id:1};
+      return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Geändert'})};
+    }
     if(path.startsWith('/api/routes')&&['POST','PUT'].includes(options.method)) {
       const route=JSON.parse(options.body);
       route.id=options.method==='POST'?Math.max(0,...existing.map(item=>item.id))+1:Number(path.split('/').at(-1));
@@ -79,7 +89,7 @@ async function run(){
   await elements.get('routes').children[0].children[3].children[0].onclick();
   assert.equal(elements.get('routeEditor').open,true,'Editing must open the collapsed editor');
   assert.equal(editor.elements.domain.focused,true);
-  assert.equal(editor.elements.id.value,25);
+  assert.equal(editor.elements.id.value,'25');
   editor.elements.domain.value='edited.example.net';
   editor.elements.public_port.value='';
   const saveButton=new Element(),beforeSave=calls.length;
@@ -97,6 +107,27 @@ async function run(){
   assert.equal(JSON.parse(calls.at(-1).options.body).public_port,443);
   assert.equal(saveButton.disabled,false);
   assert.ok(elements.get('routes').children.some(row=>row.children[0].children[0].href==='https://manual.example.net/'));
+  vm.runInContext(readFileSync('internal/app/web/ports.js','utf8'),context);
+  const rawForm=elements.get('rawForm');
+  rawForm.elements=Object.fromEntries(['id','name','target_ip','target_port','public_port','protocol','enabled'].map(key=>[key,new Element()]));
+  rawForm.reset=()=>{for(const field of Object.values(rawForm.elements)){field.value='';field.checked=false}};
+  rawForm.elements.name.value='Game';rawForm.elements.target_ip.value='192.168.1.29';rawForm.elements.public_port.value='7777,15777';rawForm.elements.protocol.value='both';
+  await rawForm.onsubmit({preventDefault(){},submitter:saveButton,target:rawForm});
+  const rawRequest=calls.find(call=>call.path==='/api/ports/batch');
+  const rawPayload=JSON.parse(rawRequest.options.body);
+  assert.equal(rawPayload.length,4,'Two ports with TCP and UDP must produce four mappings');
+  assert.ok(rawPayload.every(route=>route.target_port===route.public_port&&!route.enabled),'Raw mappings default to inactive with matching internal ports');
+  assert.equal(elements.get('rawRows').children.length,4);
+  await elements.get('rawRows').children[0].children[4].children[0].onclick();
+  assert.equal(elements.get('rawEditor').open,true);
+  assert.equal(rawForm.elements.id.value,'1');
+  rawForm.elements.target_port.value='17777';
+  await rawForm.onsubmit({preventDefault(){},submitter:saveButton,target:rawForm});
+  assert.equal(JSON.parse(calls.filter(call=>call.path==='/api/ports/1').at(-1).options.body).target_port,17777);
+  const scanForm=elements.get('portScanForm');
+  scanForm.elements={targets:{value:'192.168.1.29'},mode:{value:'full'}};
+  await scanForm.onsubmit({preventDefault(){},submitter:saveButton,target:scanForm});
+  assert.equal(JSON.parse(calls.filter(call=>call.path==='/api/scan').at(-1).options.body).mode,'full');
   assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
   console.log('Web callbacks: CT test, inline errors and existing-domain publication passed.');
 }

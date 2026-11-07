@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: '22'
       - name: Web interface regressions
-        run: node --check internal/app/web/app.js && node scripts/test-web.cjs
+        run: node --check internal/app/web/app.js && node --check internal/app/web/ports.js && node scripts/test-web.cjs
       - name: Go vet
         run: go vet ./...
       - name: Shell syntax
@@ -30,7 +30,14 @@ jobs:
       - name: Pairing code round-trip
         run: bash tests/pairing-code.sh
       - name: Python syntax
-        run: python3 -m py_compile scripts/oci-nsg.py
+        run: python3 -m py_compile scripts/oci-nsg.py tests/port-echo.py
+      - name: OCI rule merge tests
+        run: python3 tests/oci-rules.py
+      - name: Real TCP and UDP through WireGuard
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iproute2 iptables conntrack wireguard-tools sqlite3 jq
+          sudo bash tests/raw-tunnel.sh
       - name: Linux builds
         run: bash ./scripts/build.sh
       - uses: actions/upload-artifact@v4
