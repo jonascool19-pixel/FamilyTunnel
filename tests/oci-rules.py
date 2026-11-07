@@ -2,12 +2,31 @@
 import importlib.util
 import pathlib
 import unittest
+import json
+from unittest.mock import patch, MagicMock
 
 spec = importlib.util.spec_from_file_location("oci_rules", pathlib.Path(__file__).parents[1] / "scripts" / "oci-nsg.py")
 rules = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rules)
 
 class CloudRules(unittest.TestCase):
+    def test_target_discovery_and_ambiguous_target(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps([{"vnicId":"ocid1.vnic.test"}]).encode()
+        opener = MagicMock()
+        opener.open.return_value = response
+        with patch.object(rules.urllib.request, "build_opener", return_value=opener):
+            rules.run = lambda *args: {"data":{"nsg-ids":["ocid1.networksecuritygroup.test"]}}
+            self.assertEqual(rules.discover_target()["kind"], "nsg")
+            self.assertEqual(opener.open.call_args.args[0].get_header("Authorization"), "Bearer Oracle")
+            rules.run = lambda *args: {"data":{"nsg-ids":[],"subnet-id":"subnet","security-list-ids":["ocid1.securitylist.test"]}}
+            self.assertEqual(rules.discover_target()["kind"], "security-list")
+            rules.run = lambda *args: {"data":{"nsg-ids":["a","b"]}}
+            with self.assertRaises(ValueError):
+                rules.discover_target()
+            response.__enter__.return_value.read.return_value = b'[]'
+            with self.assertRaises(ValueError):
+                rules.discover_target()
     def test_unrelated_security_list_rule_is_preserved(self):
         ssh = {"protocol":"6", "source":"192.0.2.0/24", "source-type":"CIDR_BLOCK", "is-stateless":False, "tcp-options":{"destination-port-range":{"min":22,"max":22}}}
         obsolete = {"protocol":"6", "source":"0.0.0.0/0", "description":rules.MARKER + "old", "tcp-options":{"destination-port-range":{"min":8888,"max":8888}}}

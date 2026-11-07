@@ -27,6 +27,7 @@ const context=vm.createContext({
       rawExisting=JSON.parse(options.body).map((route,index)=>({...route,id:index+1}));
       return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Portfreigaben gespeichert'})};
     }
+    if(path==='/api/ports/publish'&&options.method==='POST')return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Einrichtung läuft im Hintergrund'})};
     if(path==='/api/ports/1'&&options.method==='PUT'){
       rawExisting[0]={...JSON.parse(options.body),id:1};
       return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Geändert'})};
@@ -117,10 +118,19 @@ async function run(){
   const rawPayload=JSON.parse(rawRequest.options.body);
   assert.equal(rawPayload.length,4,'Two ports with TCP and UDP must produce four mappings');
   assert.ok(rawPayload.every(route=>route.target_port===route.public_port&&!route.enabled),'Raw mappings default to inactive with matching internal ports');
-  assert.equal(elements.get('rawRows').children.length,4);
-  await elements.get('rawRows').children[0].children[4].children[0].onclick();
+  assert.equal(elements.get('rawRows').children.length,1,'One device card for four ports on the same IP');
+  const device=elements.get('rawRows').children[0];
+  assert.equal(device.children[1].children.length,4);
+  device.children[0].children[0].checked=true;
+  device.children[0].children[0].onchange();
+  vm.runInContext('renderDevices()',context);
+  assert.equal(elements.get('rawRows').children[0].children[1].children.filter(item=>item.children[0].children[0].checked).length,4,'Device selection survives background renders');
+  await elements.get('rawActivate').onclick();
+  assert.equal(JSON.parse(calls.find(call=>call.path==='/api/ports/publish').options.body).length,4,'One action publishes every selected device port');
+  await elements.get('rawRows').children[0].children[1].children[0].children[1].children[0].onclick();
   assert.equal(elements.get('rawEditor').open,true);
   assert.equal(rawForm.elements.id.value,'1');
+  assert.equal(elements.get('rawAdvanced').open,true);
   rawForm.elements.target_port.value='17777';
   await rawForm.onsubmit({preventDefault(){},submitter:saveButton,target:rawForm});
   assert.equal(JSON.parse(calls.filter(call=>call.path==='/api/ports/1').at(-1).options.body).target_port,17777);
@@ -128,6 +138,11 @@ async function run(){
   scanForm.elements={targets:{value:'192.168.1.29'},mode:{value:'full'}};
   await scanForm.onsubmit({preventDefault(){},submitter:saveButton,target:scanForm});
   assert.equal(JSON.parse(calls.filter(call=>call.path==='/api/scan').at(-1).options.body).mode,'full');
+  vm.runInContext("renderPortScan({results:[{target_ip:'192.168.1.29',target_port:7777},{target_ip:'192.168.1.40',target_port:8080}]})",context);
+  assert.equal(elements.get('rawRows').children.length,2,'New IP gets one separate group; repeated hits share the existing group');
+  assert.equal(elements.get('rawRows').children[0].children[1].children.length,5,'Edited port plus old scan endpoint, with all other hits deduplicated');
+  vm.runInContext("renderSetup({state:'needs_connection',message:'Oracle einmalig verbinden'})",context);
+  assert.equal(elements.get('setupStatus').textContent,'Oracle einmalig verbinden');
   assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
   console.log('Web callbacks: CT test, inline errors and existing-domain publication passed.');
 }

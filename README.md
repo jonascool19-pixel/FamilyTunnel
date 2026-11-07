@@ -2,7 +2,7 @@
 
 FamilyTunnel veröffentlicht HTTP-/HTTPS-Webdienste sowie ausgewählte TCP-/UDP-Dienste aus einem Heimnetz über eine Oracle-Cloud-VM. Ein Ubuntu-24.04-LXC baut WireGuard ausgehend auf; am Heimrouter ist keine Portfreigabe nötig. Caddy beendet TLS für Webseiten. Direkte TCP-/UDP-Freigaben verwenden eigene NAT-/FORWARD-Regeln durch WireGuard.
 
-Neu: [TCP/UDP, tiefe Suche und optionale Oracle-Automation](docs/tcp-udp.md). Zur gewünschten Neustartfolge gibt es ein [geprüftes Konzept](docs/maintenance-design.md); ein automatischer Neustart ist nicht eingerichtet.
+Neu: **Geräte suchen und freigeben** gruppiert Treffer nach lokaler IP. Ein Gerät oder einzelne Ports auswählen und gemeinsam freigeben; die Einrichtung läuft im Hintergrund. [TCP/UDP, tiefe Suche und Oracle-Anbindung](docs/tcp-udp.md). Zur gewünschten Neustartfolge gibt es ein [geprüftes Konzept](docs/maintenance-design.md); ein automatischer Neustart ist nicht eingerichtet.
 
 ## Eine Domain, mehrere HTTPS-Ports
 
