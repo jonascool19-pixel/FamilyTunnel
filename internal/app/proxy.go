@@ -157,6 +157,9 @@ func (s *Service) proxy(w http.ResponseWriter, r *http.Request) {
 	s.traffic.add(target.address()+"|"+time.Now().UTC().Truncate(time.Hour).Format(time.RFC3339), c)
 }
 func caddyfile(rs []Route) string {
+	return caddyfileVerified(rs, nil)
+}
+func caddyfileVerified(rs []Route, proofs []siteVerification) string {
 	var b strings.Builder
 	b.WriteString("{\n admin 127.0.0.1:2019\n}\n")
 	active := 0
@@ -165,7 +168,13 @@ func caddyfile(rs []Route) string {
 			continue
 		}
 		active++
-		fmt.Fprintf(&b, "https://%s {\n reverse_proxy 10.77.0.2:9080 {\n  header_up Host %s\n  header_up X-FamilyTunnel-Port %d\n  transport http {\n   dial_timeout 5s\n   response_header_timeout 35s\n  }\n }\n log {\n  output discard\n }\n}\n", r.address(), r.address(), r.port())
+		fmt.Fprintf(&b, "https://%s {\n", r.address())
+		for _, proof := range proofs {
+			if proof.Domain == r.Domain {
+				fmt.Fprintf(&b, " respond /%s \"google-site-verification: %s\" 200\n", proof.File, proof.File)
+			}
+		}
+		fmt.Fprintf(&b, " reverse_proxy 10.77.0.2:9080 {\n  header_up Host %s\n  header_up X-FamilyTunnel-Port %d\n  transport http {\n   dial_timeout 5s\n   response_header_timeout 35s\n  }\n }\n log {\n  output discard\n }\n}\n", r.address(), r.port())
 	}
 	if active == 0 {
 		b.WriteString(":80 {\n respond \"FamilyTunnel: no services configured\" 404\n}\n")
@@ -179,7 +188,11 @@ var controlHTTP = &http.Client{Timeout: 15 * time.Second, Transport: &http.Trans
 var configHTTP = &http.Client{Timeout: 120 * time.Second, Transport: &http.Transport{Proxy: nil}}
 
 func (s *Service) applyCaddy(rs []Route) error {
-	b := []byte(caddyfile(rs))
+	proofs, err := loadSiteVerifications(s.cfg.Dir)
+	if err != nil {
+		return err
+	}
+	b := []byte(caddyfileVerified(rs, proofs))
 	req, e := http.NewRequest("POST", s.cfg.CaddyURL+"/load", bytes.NewReader(b))
 	if e != nil {
 		return e
