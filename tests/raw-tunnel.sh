@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 # Real WireGuard + TCP/UDP + two-stage NAT; all changes stay in disposable namespaces.
 set -Eeuo pipefail
+umask 077
 [[ $EUID == 0 ]] || { echo 'Run this integration test with sudo';exit 1; }
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 state=$(mktemp -d /var/tmp/ft-integration.XXXXXX)
 vps=ft-vps-$$;ct=ft-ct-$$;wan=ft-wan-$$;lan=ft-lan-$$
 cleanup(){
+ status=$?
+ if ((status!=0));then
+  for ns in "$vps" "$ct" "$wan" "$lan";do
+   echo "Diagnostic namespace: $ns"
+   ip netns exec "$ns" iptables-save -c 2>/dev/null || true
+   ip netns exec "$ns" conntrack -L -p udp 2>/dev/null || true
+   ip -n "$ns" link show ft0 2>/dev/null || true
+  done
+ fi
  for ns in "$vps" "$ct" "$wan" "$lan";do
   ip netns pids "$ns" 2>/dev/null | xargs -r kill 2>/dev/null || true
   ip netns del "$ns" 2>/dev/null || true
@@ -52,6 +62,7 @@ with socket.create_connection(("198.18.0.1", 28080), timeout=5) as connection:
         received += connection.recv(16384)
     assert received == payload, "TCP stream changed"
 for payload in (b"", b"game-query", b"x" * 1400, b"z" * 64000):
+    print("Testing UDP payload bytes:", len(payload), flush=True)
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
         udp.settimeout(5)
         udp.sendto(payload, ("198.18.0.1", 28081))
