@@ -197,6 +197,7 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "invalid JSON")
 			return
 		}
+		v.Name = strings.TrimSpace(v.Name)
 		if e = v.validate(); e != nil {
 			fail(w, 400, e.Error())
 			return
@@ -222,13 +223,13 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "use collection URL")
 			return
 		}
-		result, e = s.db.Exec("INSERT INTO routes(domain,backend,enabled,public_port) VALUES(?,?,?,?)", v.Domain, v.Backend, v.Enabled, v.port())
+		result, e = s.db.Exec("INSERT INTO routes(domain,backend,enabled,public_port,name) VALUES(?,?,?,?,?)", v.Domain, v.Backend, v.Enabled, v.port(), v.Name)
 	case "PUT":
 		if id == 0 {
 			fail(w, 400, "route id required")
 			return
 		}
-		result, e = s.db.Exec("UPDATE routes SET domain=?,backend=?,enabled=?,public_port=? WHERE id=?", v.Domain, v.Backend, v.Enabled, v.port(), id)
+		result, e = s.db.Exec("UPDATE routes SET domain=?,backend=?,enabled=?,public_port=?,name=? WHERE id=?", v.Domain, v.Backend, v.Enabled, v.port(), v.Name, id)
 	case "DELETE":
 		if id == 0 {
 			fail(w, 400, "route id required")

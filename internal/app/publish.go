@@ -85,6 +85,7 @@ func (s *Service) planAutoWeb(choice publishChoice, web *[]Route, ports *[]PortF
 		}
 	}
 	candidate := Route{Domain: domain, Backend: backend, Enabled: true, PublicPort: choice.TargetPort}
+	_ = s.db.QueryRow("SELECT name FROM scan_services WHERE target_ip=? AND target_port=?", choice.TargetIP, choice.TargetPort).Scan(&candidate.Name)
 	if candidate.PublicPort < 1024 {
 		candidate.PublicPort = 443
 	}

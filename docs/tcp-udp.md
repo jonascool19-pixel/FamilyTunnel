@@ -22,6 +22,10 @@ Direkte Freigaben ändern die Anwendungsdaten nicht: Spielclients verwenden Doma
 
 Die Tunnel-MTU bleibt zu beachten. Bei WireGuard-MTU 1420 passen 1392 Bytes IPv4-UDP-Nutzdaten ohne Fragmentierung. Größere Datagramme benötigen erlaubte IP-Fragmentierung oder eine passende MTU-Behandlung im Dienst. Das Programm entfernt ein gesetztes Don't-Fragment-Bit nicht stillschweigend. Der Integrationstest prüft sowohl korrekte ICMP-PMTU-Rückmeldung als auch große fragmentierbare UDP-Datagramme in beiden Richtungen.
 
+## Direkt bearbeiten
+
+Unter „Aktivierte Dienste“ öffnet „Bearbeiten“ ein Formular direkt in der jeweiligen Karte. Name, lokale IP, interner und öffentlicher Port sind änderbar; Webdienste bieten zusätzlich Domain und Backend-Protokoll, direkte Freigaben TCP/UDP. Speichern aktualisiert die gemeinsame Liste sofort und stößt die Hintergrundübertragung an. Die fünfsekündige Aktualisierung ersetzt ein geöffnetes Formular nicht. Bei Validierungsfehlern oder belegten Ports bleiben Eingaben und Fehlermeldung im Formular erhalten; Abbrechen verwirft nur die ungespeicherten Änderungen. Eigene Webdienstnamen werden in SQLite gespeichert und bei Synchronisierung/Backup/Restore erhalten; alte Datenbanken erhalten die neue Namensspalte mit leerer Vorgabe.
+
 ## Linux und LXC
 
 IP-Weiterleitung und Netfilter-NAT müssen in beiden Netzwerk-Namensräumen möglich sein. Bei aktiven Freigaben setzt FamilyTunnel `net.ipv4.ip_forward=1` und speichert den vorherigen Wert. Cleanup entfernt nur eigene Chains/Verbindungen und stellt den vorherigen Wert wieder her. Andere Firewallregeln werden nicht geleert. Die WireGuard-AllowedIPs bleiben auf die beiden Tunneladressen begrenzt. Änderungen entwerten nur zugehörige Conntrack-Einträge.
