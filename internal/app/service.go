@@ -100,6 +100,7 @@ func (s *Service) handlers() http.Handler {
 		jsonOut(w, 200, s.setupSnapshot())
 	}))
 	m.HandleFunc("/api/backend-test", s.auth.protect(s.backendTestAPI))
+	m.HandleFunc("/api/port-test", s.auth.protect(s.portTestAPI))
 	m.HandleFunc("/api/public-test", s.auth.protect(s.publicTestAPI))
 	m.HandleFunc("/api/status", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
@@ -123,26 +124,7 @@ func (s *Service) handlers() http.Handler {
 		}
 		jsonOut(w, 200, v)
 	}))
-	m.HandleFunc("/api/logs", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			fail(w, 405, "GET required")
-			return
-		}
-		rows, e := s.db.Query("SELECT at,kind,message FROM events ORDER BY id DESC LIMIT 100")
-		if e != nil {
-			fail(w, 500, "database unavailable")
-			return
-		}
-		defer rows.Close()
-		out := []map[string]string{}
-		for rows.Next() {
-			var a, k, m string
-			if rows.Scan(&a, &k, &m) == nil {
-				out = append(out, map[string]string{"at": a, "kind": k, "message": m})
-			}
-		}
-		jsonOut(w, 200, out)
-	}))
+	m.HandleFunc("/api/logs", s.auth.protect(s.logsAPI))
 	files, _ := fs.Sub(web, "web")
 	m.Handle("/", http.FileServer(http.FS(files)))
 	return security(m)

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ func TestFullPortSweepInNamespace(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	s := &Service{db: db}
-	job := &scanJob{Running: true, Total: len(ports), cancel: cancel, finished: make(chan struct{})}
+	job := &scanJob{Running: true, Targets: target, Mode: "full", Total: len(ports), cancel: cancel, finished: make(chan struct{})}
 	s.scan = job
 	s.runPortScan(ctx, job, ips, ports)
 	if job.Running || job.Done != 65535 || job.Found != 1 {
@@ -40,7 +41,26 @@ func TestFullPortSweepInNamespace(t *testing.T) {
 	if err != nil || len(ps) != 1 || ps[0].TargetPort != 18080 || ps[0].Enabled {
 		t.Fatalf("unexpected proposals: %+v %v", ps, err)
 	}
+	fresh := &Service{db: db}
+	snapshot := fresh.scanSnapshot()
+	if snapshot["targets"] != target || snapshot["mode"] != "full" {
+		t.Fatal("device scan context lost on restart")
+	}
+	ps[0].Enabled = true
+	ps[0].PublicPort = 28080
+	if err = replaceAllRoutes(db, []Route{}, ps); err != nil {
+		t.Fatal(err)
+	}
+	s.cfg = Config{Role: "client", PublicIP: "198.18.0.1"}
+	for _, location := range []string{"local", "public"} {
+		out := httptest.NewRecorder()
+		s.portTestAPI(out, httptest.NewRequest("POST", "/api/port-test", strings.NewReader(`{"id":`+strconv.FormatInt(ps[0].ID, 10)+`,"location":"`+location+`"}`)))
+		if out.Code != 200 || !strings.Contains(out.Body.String(), `"reachable":true`) {
+			t.Fatalf("real %s API test failed: %s", location, out.Body.String())
+		}
+	}
 	t.Log("All 65535 TCP ports scanned; actual open port persisted as inactive proposal")
+	t.Log("Real local and public TCP checks passed through the configured WireGuard forwarding")
 }
 
 func TestForwardValidation(t *testing.T) {

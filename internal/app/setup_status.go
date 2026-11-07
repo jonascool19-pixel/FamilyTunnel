@@ -21,7 +21,12 @@ func (s *Service) setSetup(state, message string) {
 func (s *Service) setupSnapshot() setupView {
 	s.setupMu.RLock()
 	defer s.setupMu.RUnlock()
-	return s.setup
+	view := s.setup
+	if view.State == "" {
+		view.State = "waiting"
+		view.Message = "Noch keine Einrichtungsbestätigung. Der Heim-Client prüft die Verbindung zu Oracle im Hintergrund."
+	}
+	return view
 }
 func (s *Service) configSnapshot() ([]Route, []PortForward, error) {
 	s.routeMu.Lock()

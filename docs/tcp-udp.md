@@ -55,3 +55,11 @@ Zuerst Oracle-Server, danach CT aktualisieren. Vorhandene Webseiten werden nicht
 GitHub Actions führt Go-, GUI- und OCI-Regeltests aus. Der Integrationstest in `tests/raw-tunnel.sh` verwendet vier wegwerfbare Linux-Netzwerk-Namensräume, echte WireGuard-Schlüssel und TCP-/UDP-Echo-Dienste. Er prüft zwei NAT-Stufen, Datenintegrität, unterschiedliche interne/externe Ports, Deaktivieren und Cleanup. Er testet keine individuellen Spielversionen, keine echte OCI-IAM-Anbindung und keinen echten unprivilegierten Proxmox-CT.
 
 Referenzen: [WireGuard](https://www.wireguard.com/papers/wireguard.pdf), [OCI-Sicherheitslisten](https://docs.oracle.com/en-us/iaas/tools/oci-cli/latest/oci_cli_docs/cmdref/network/security-list/update.html), [OCI-NSG-Regeln](https://docs.oracle.com/en-us/iaas/tools/oci-cli/latest/oci_cli_docs/cmdref/network/nsg/rules/add.html).
+
+## Status, Tests und Ereignisse
+
+Jede aktive Dienstkarte zeigt den aktuellen Einrichtungsstatus mit Zeitpunkt und getrennte Knöpfe für Heimnetz und öffentlichen Zugriff. Lokale Webtests prüfen TCP zum gespeicherten Backend. Öffentliche HTTPS-Tests prüfen Zertifikat, DNS und die Tunnel-Antwortbestätigung. Direkte TCP-Tests prüfen den Verbindungsaufbau; sie bestätigen keine erfolgreiche Anmeldung oder Spielfunktion. UDP bleibt ohne passende Dienstantwort ausdrücklich unbestätigt. Testergebnisse mit Zeitstempel überstehen die regelmäßige Aktualisierung und bleiben bis zu 24 Stunden im jeweiligen Browser gespeichert; geänderte Zieladressen/Ports erhalten eigene Ergebnisse. Sie sind keine fortlaufende Überwachung.
+
+Die vollständige Suche auf einem Gerät zeigt ihren Fortschritt direkt unter dessen Ports. Vorhandene Treffer verschwinden beim Start nicht. Während einer laufenden Suche sind weitere Startknöpfe deaktiviert; Fehler werden direkt am Gerät angezeigt. Ziel und Modus werden mit dem Suchstatus gespeichert.
+
+Ereignisse erscheinen in der Browser-Ortszeit mit Zeitzonenhinweis. Die Speicherung bleibt UTC; der Fehlerbericht nennt Ortszeit und UTC und enthält auch direkte Portfreigaben, Einrichtung und Suchstatus. „Alle Ereignisse löschen“ leert nach Bestätigung nur die Ereignistabelle des aktuellen Controllers. Einstellungen, Weiterleitungen, Statistiken und die weitere Protokollierung bleiben erhalten.

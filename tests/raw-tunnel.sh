@@ -35,6 +35,7 @@ link "$wan" public "$vps" public 198.18.0.2/24 198.18.0.1/24
 link "$vps" underlay "$ct" underlay 192.0.2.1/24 192.0.2.2/24
 link "$ct" local "$lan" local 192.168.99.1/24 192.168.99.2/24
 ip -n "$wan" route add default via 198.18.0.1
+ip -n "$ct" route add 198.18.0.1/32 via 192.0.2.1
 ip -n "$lan" route add default via 192.168.99.1
 wg genkey > "$state/server.key";wg genkey > "$state/client.key"
 server_pub=$(wg pubkey < "$state/server.key");client_pub=$(wg pubkey < "$state/client.key")

@@ -191,7 +191,9 @@ func (s *Service) applyCaddy(rs []Route) error {
 	return nil
 }
 func (s *Service) syncRoutes() (syncErr error) {
-	s.setSetup("working", "Tunnel und Freigaben werden im Hintergrund eingerichtet.")
+	if s.setupSnapshot().State != "configured" {
+		s.setSetup("working", "Tunnel und Freigaben werden im Hintergrund eingerichtet.")
+	}
 	defer func() {
 		if syncErr != nil {
 			s.setSetup("failed", syncErr.Error())

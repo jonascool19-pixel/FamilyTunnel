@@ -12,18 +12,23 @@ class Element {
   focus(){this.focused=true;}
 }
 const elements=new Map(),storage=new Map(),calls=[];
-let failTest=false,failSave=false,existing=[],rawExisting=[];
+let failTest=false,failSave=false,failScan=false,failScanGet=false,holdBackend=false,releaseBackend,confirmAllowed=true,existing=[],rawExisting=[],logEntries=[];
 const context=vm.createContext({
   URL,
   document:{getElementById(id){if(!elements.has(id))elements.set(id,new Element());return elements.get(id)},createElement(){return new Element()},querySelector(){return null},querySelectorAll(){return []}},
   localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},
-  setInterval(){},confirm(){return true},
+  setInterval(){},confirm(){return confirmAllowed},
   fetch:async(path,options)=>{
     calls.push({path,options});
+    if(path==='/api/logs'){if(options.method==='DELETE'){logEntries=[];return {ok:true,text:async()=>JSON.stringify({message:'Ereignisse gelöscht'})}}return {ok:true,text:async()=>JSON.stringify(logEntries)}}
+    if(path==='/api/scan'){if(failScan||(failScanGet&&options.method==='GET'))return {ok:false,status:503,text:async()=>JSON.stringify({error:'Suche vorübergehend nicht verfügbar'})};return {ok:true,text:async()=>JSON.stringify({running:options.method==='POST',done:0,total:65535,found:0,targets:'192.168.1.29',mode:'full'})}}
+    if(path==='/api/ports'&&options.method==='GET')return {ok:true,text:async()=>JSON.stringify(rawExisting)};
+    if(path==='/api/setup-status')return {ok:true,text:async()=>JSON.stringify({state:'configured',message:'Tunnel und Oracle-Regeln eingerichtet'})};
+    if(path==='/api/port-test'){const input=JSON.parse(options.body),udp=rawExisting.find(p=>p.id===input.id)?.protocol==='udp';return {ok:true,text:async()=>JSON.stringify(udp?{state:'unknown',reachable:null,message:'UDP nicht zuverlässig prüfbar'}:{state:'reachable',reachable:true,message:'TCP-Verbindung möglich'})}}
     if(failSave&&options.method==='PUT')return {ok:false,status:409,text:async()=>JSON.stringify({error:'Port bereits belegt'})};
     if(path==='/api/session')return {ok:false,status:401,text:async()=>JSON.stringify({error:'login'})};
     if(path==='/api/public-test')return {ok:true,text:async()=>JSON.stringify({reachable:true,message:'HTTPS erreichbar'})};
-    if(path==='/api/backend-test')return {ok:!failTest,status:failTest?503:200,text:async()=>JSON.stringify(failTest?{error:'Testfehler'}:{reachable:true,message:'Vom CT erreichbar (TCP).'})};
+    if(path==='/api/backend-test'){if(holdBackend)return new Promise(resolve=>{releaseBackend=resolve});return {ok:!failTest,status:failTest?503:200,text:async()=>JSON.stringify(failTest?{error:'Testfehler'}:{reachable:true,message:'Vom CT erreichbar (TCP).'})}};
     if(path==='/api/routes'&&options.method==='GET')return {ok:true,text:async()=>JSON.stringify(existing)};
     if(path==='/api/ports/batch'&&options.method==='POST'){
       rawExisting=JSON.parse(options.body).map((route,index)=>({...route,id:index+1}));
@@ -72,6 +77,7 @@ async function run(){
   assert.equal(JSON.parse(calls.at(-1).options.body).public_port,443);
   assert.equal(saveButton.disabled,false);
   assert.ok(elements.get('routes').children.some(row=>row.children[0].children[0].href==='https://manual.example.net/'));
+  vm.runInContext(readFileSync('internal/app/web/checks.js','utf8'),context);
   vm.runInContext(readFileSync('internal/app/web/ports.js','utf8'),context);
   vm.runInContext(readFileSync('internal/app/web/editor.js','utf8'),context);
   const rawForm=elements.get('rawForm');
@@ -107,7 +113,7 @@ async function run(){
   assert.equal(elements.get('rawRows').children.length,2,'New IP gets one separate group; repeated hits share the existing group');
   assert.equal(elements.get('rawRows').children[0].children[1].children.length,5,'Edited port plus old scan endpoint, with all other hits deduplicated');
   vm.runInContext("renderSetup({state:'needs_connection',message:'Oracle einmalig verbinden'})",context);
-  assert.equal(elements.get('setupStatus').textContent,'Oracle einmalig verbinden');
+  assert.match(elements.get('setupStatus').textContent,/Oracle einmalig verbinden/);
   elements.get('serviceDomain').value='public.example.net';
   context.unified=[{id:55,domain:'public.example.net',backend:'http://192.168.1.95:8096',public_port:8096,enabled:true}];
   vm.runInContext("renderRoutes(unified); renderPortScan({domain:'public.example.net',results:[{target_ip:'192.168.1.95',target_port:8096,name:'Jellyfin',backend:'http://192.168.1.95:8096'},{target_ip:'192.168.1.95',target_port:80,name:'Musikboard',backend:'http://192.168.1.95:80'}]})",context);
@@ -153,6 +159,30 @@ async function run(){
   await directEditor.onsubmit({preventDefault(){}});
   const directWrite=JSON.parse(calls.filter(call=>call.path==='/api/ports/1'&&call.options.method==='PUT').at(-1).options.body);
   assert.equal(directWrite.name,'Mein Spiel');assert.equal(directWrite.protocol,'udp');assert.equal(directWrite.public_port,17778);assert.equal(Object.keys(directWrite).length,7,'Only API-supported fields may be sent');
+  let media=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Medienserver');
+  holdBackend=true;const pending=media.children[4].children[3].onclick();
+  vm.runInContext('renderDevices()',context);
+  media=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Medienserver');
+  assert.match(media.children[5].children[1].textContent,/Prüfung läuft/);assert.equal(media.children[4].children[3].disabled,true,'Polling preserves in-flight checks');
+  releaseBackend({ok:true,text:async()=>JSON.stringify({reachable:true,message:'Vom CT erreichbar (TCP).'})});holdBackend=false;await pending;
+  assert.match(media.children[5].children[1].textContent,/Vom CT erreichbar/);assert.equal(media.children[4].children[3].disabled,false);
+  failTest=true;await media.children[4].children[3].onclick();failTest=false;vm.runInContext('renderDevices()',context);
+  media=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Medienserver');assert.match(media.children[5].children[1].textContent,/Testfehler/,'Failed result remains visible after polling');
+  assert.ok(storage.get('ft-service-checks').includes('Testfehler'),'Last checks survive reload with timestamps');
+  const udpCard=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Spiel');await udpCard.children[4].children[2].onclick();assert.match(udpCard.children[5].children[0].textContent,/UDP nicht zuverlässig/);assert.notEqual(udpCard.children[5].children[0].className,'test-ok');
+  vm.runInContext("renderSetup({state:'working',message:'Oracle wird eingerichtet'})",context);assert.match(media.children[3].textContent,/Einrichtung läuft/);
+  failScanGet=true;elements.get('app').hidden=false;await vm.runInContext('refreshPorts()',context);elements.get('app').hidden=true;failScanGet=false;
+  assert.match(elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Medienserver').children[3].textContent,/Regeln eingerichtet/,'A scan error must not hide setup status');
+  vm.runInContext("renderPortScan({running:false,results:[{target_ip:'192.168.1.29',target_port:7777,name:'Mein Spiel'}]})",context);
+  const deviceForScan=elements.get('rawRows').children.find(card=>card.children[0].children[1].textContent.includes('192.168.1.29'));
+  await deviceForScan.children[3].onclick();
+  let scanning=elements.get('rawRows').children.find(card=>card.children[0].children[1].textContent.includes('192.168.1.29'));assert.match(scanning.children[2].textContent,/0 \/ 65535/);assert.equal(scanning.children[3].disabled,true);assert.ok(scanning.children[1].children.length>0,'Starting a full scan must retain existing hits');
+  vm.runInContext("renderPortScan({running:true,targets:'192.168.1.29',done:2048,total:65535,found:4})",context);scanning=elements.get('rawRows').children.find(card=>card.children[0].children[1].textContent.includes('192.168.1.29'));assert.match(scanning.children[2].textContent,/2048 \/ 65535/);
+  vm.runInContext('renderPortScan({running:false})',context);failScan=true;scanning=elements.get('rawRows').children.find(card=>card.children[0].children[1].textContent.includes('192.168.1.29'));await scanning.children[3].onclick();failScan=false;assert.match(scanning.children[2].textContent,/Suche vorübergehend nicht verfügbar/);
+  assert.match(vm.runInContext('formatLocalTime("2026-11-07T20:01:58Z","Europe/Berlin")',context),/21:01:58/,'UTC is displayed in the intended timezone');
+  context.logSample=[{at:'2026-11-07T20:01:58Z',kind:'test',message:'Beispiel'}];vm.runInContext('renderLogs(logSample)',context);assert.match(elements.get('logTimezone').textContent,/Ortszeit/);
+  const beforeClear=calls.length;confirmAllowed=false;await elements.get('clearLogs').onclick();assert.equal(calls.length,beforeClear,'Cancelling never deletes logs');confirmAllowed=true;await elements.get('clearLogs').onclick();assert.ok(calls.some(call=>call.path==='/api/logs'&&call.options.method==='DELETE'));assert.match(elements.get('logs').textContent,/Keine Ereignisse/);
+  let report='';context.captureReport=async text=>{report=text};vm.runInContext('copyText=captureReport',context);await elements.get('copyReport').onclick();assert.match(report,/DIREKTE PORTFREIGABEN/);assert.match(report,/EINRICHTUNG/);assert.match(report,/UTC:/);
     assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
   console.log('Web callbacks: unified names, grouped selection, publication, active list and HTTPS test passed.');
 }

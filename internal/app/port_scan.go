@@ -19,6 +19,8 @@ type scanJob struct {
 	Found    int    `json:"found"`
 	Started  string `json:"started"`
 	Message  string `json:"message"`
+	Targets  string `json:"targets"`
+	Mode     string `json:"mode"`
 	cancel   context.CancelFunc
 	finished chan struct{}
 }
@@ -74,6 +76,8 @@ func (s *Service) scanSnapshot() map[string]any {
 		job.Found = s.scan.Found
 		job.Started = s.scan.Started
 		job.Message = s.scan.Message
+		job.Targets = s.scan.Targets
+		job.Mode = s.scan.Mode
 	} else {
 		_ = json.Unmarshal([]byte(setting(s.db, "last_port_scan")), &job)
 		if job.Running {
@@ -81,7 +85,7 @@ func (s *Service) scanSnapshot() map[string]any {
 			job.Message = "Suche durch Dienstneustart beendet. Gespeicherte Treffer bleiben erhalten."
 		}
 	}
-	return map[string]any{"running": job.Running, "total": job.Total, "done": job.Done, "found": job.Found, "started": job.Started, "message": job.Message}
+	return map[string]any{"running": job.Running, "total": job.Total, "done": job.Done, "found": job.Found, "started": job.Started, "message": job.Message, "targets": job.Targets, "mode": job.Mode}
 }
 
 func (s *Service) stopScan() {
@@ -231,7 +235,7 @@ func (s *Service) scanAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
-		job := &scanJob{Running: true, Total: len(ips) * len(ports), Started: time.Now().UTC().Format(time.RFC3339), Message: "TCP-Ports werden geprüft. UDP erfordert eine passende Dienstprüfung oder manuelle Freigabe.", cancel: cancel, finished: make(chan struct{})}
+		job := &scanJob{Running: true, Targets: strings.Join(ips, ","), Mode: input.Mode, Total: len(ips) * len(ports), Started: time.Now().UTC().Format(time.RFC3339), Message: "TCP-Ports werden geprüft. UDP erfordert eine passende Dienstprüfung oder manuelle Freigabe.", cancel: cancel, finished: make(chan struct{})}
 		s.scan = job
 		s.scanMu.Unlock()
 		if input.Domain != "" {
