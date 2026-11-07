@@ -4,6 +4,7 @@ set -Eeuo pipefail
 STATE=${FT_STATE:-/var/lib/familytunnel}
 forget_mapping(){
  local proto=$1 public=$2
+ [[ $proto == tcp || $proto == udp ]] && [[ $public =~ ^[0-9]+$ ]] || return 0
  if [[ $(jq -r .role "$STATE/config.json") == server ]];then
   conntrack -D -p "$proto" --reply-src 10.77.0.2 --orig-port-dst "$public" >/dev/null 2>&1 || true
  else

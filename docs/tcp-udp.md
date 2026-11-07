@@ -8,6 +8,8 @@ Eine öffentliche IPv4 bietet pro Protokoll und Port genau ein Ziel. TCP/7777 un
 
 Direkte Freigaben ändern die Anwendungsdaten nicht: Spielclients verwenden Domain oder VPS-IP mit Port. Ein HTTP-Backend bleibt HTTP, ein TLS-Backend bleibt TLS; direktes TCP fügt kein HTTPS hinzu. Aufgrund des gezielten SNAT sieht der Heimdienst die LAN-IP des FamilyTunnel-CT statt der ursprünglichen Internet-Client-IP. Dienste mit IP-Sperren oder öffentlich angekündigten Serveradressen müssen entsprechend konfiguriert werden. Spezielle Spielprotokolle, die weitere dynamische Ports aushandeln, benötigen passende zusätzliche Freigaben.
 
+Die Tunnel-MTU bleibt zu beachten. Bei WireGuard-MTU 1420 passen 1392 Bytes IPv4-UDP-Nutzdaten ohne Fragmentierung. Größere Datagramme benötigen erlaubte IP-Fragmentierung oder eine passende MTU-Behandlung im Dienst. Das Programm entfernt ein gesetztes Don't-Fragment-Bit nicht stillschweigend. Der Integrationstest prüft sowohl korrekte ICMP-PMTU-Rückmeldung als auch große fragmentierbare UDP-Datagramme in beiden Richtungen.
+
 ## Linux und LXC
 
 IP-Weiterleitung und Netfilter-NAT müssen in beiden Netzwerk-Namensräumen möglich sein. Bei aktiven Freigaben setzt FamilyTunnel `net.ipv4.ip_forward=1` und speichert den vorherigen Wert. Cleanup entfernt nur eigene Chains/Verbindungen und stellt den vorherigen Wert wieder her. Andere Firewallregeln werden nicht geleert. Die WireGuard-AllowedIPs bleiben auf die beiden Tunneladressen begrenzt. Änderungen entwerten nur zugehörige Conntrack-Einträge.
