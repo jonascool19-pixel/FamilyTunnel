@@ -23,15 +23,17 @@ import (
 var web embed.FS
 
 type Service struct {
-	cfg         Config
-	db          *sql.DB
-	auth        *auth
-	traffic     traffic
-	mu          sync.Mutex
-	healthMu    sync.RWMutex
-	health      map[string]any
-	started     time.Time
-	discoveryMu sync.Mutex
+	cfg          Config
+	db           *sql.DB
+	auth         *auth
+	traffic      traffic
+	mu           sync.Mutex
+	healthMu     sync.RWMutex
+	health       map[string]any
+	started      time.Time
+	discoveryMu  sync.Mutex
+	routeMu      sync.Mutex
+	routeChanges chan struct{}
 }
 
 func newService(c Config) (*Service, error) {
@@ -44,6 +46,7 @@ func newService(c Config) (*Service, error) {
 		db.Close()
 		return nil, e
 	}
+	s.routeChanges = make(chan struct{}, 1)
 	return s, nil
 }
 func (s *Service) handlers() http.Handler {
@@ -125,8 +128,6 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "manage routes on the home client")
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	idText := strings.TrimPrefix(r.URL.Path, "/api/routes")
 	idText = strings.Trim(idText, "/")
 	test := strings.HasSuffix(idText, "/test")
@@ -164,6 +165,8 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 		jsonOut(w, 200, rs)
 		return
 	}
+	s.routeMu.Lock()
+	defer s.routeMu.Unlock()
 	var v Route
 	if r.Method == "POST" || r.Method == "PUT" {
 		if decode(w, r, &v) != nil {
@@ -209,12 +212,16 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	event(s.db, "route", "route configuration changed")
-	syncErr := s.syncRoutes()
-	if syncErr != nil {
-		jsonOut(w, 202, map[string]string{"message": "Lokal gespeichert. Übertragung an Oracle ausstehend: " + syncErr.Error()})
+	select {
+	case s.routeChanges <- struct{}{}:
+	default:
+	}
+	rs, err := routes(s.db)
+	if err != nil {
+		fail(w, 500, "Gespeichert, aber Liste konnte nicht gelesen werden")
 		return
 	}
-	jsonOut(w, 200, map[string]bool{"ok": true})
+	jsonOut(w, 202, map[string]any{"ok": true, "sync_pending": true, "routes": rs, "message": "Gespeichert. Übertragung an Oracle läuft im Hintergrund."})
 }
 func (s *Service) internalHandlers() http.Handler {
 	m := http.NewServeMux()
@@ -365,6 +372,7 @@ func (s *Service) serve() error {
 				return
 			case <-tick.C:
 				s.flushStats()
+			case <-s.routeChanges:
 			}
 		}
 	}()

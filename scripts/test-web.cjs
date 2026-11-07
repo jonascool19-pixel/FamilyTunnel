@@ -6,6 +6,8 @@ class Element {
   constructor(){this.children=[];this.hidden=true;this.value='';this.textContent='';}
   append(...items){this.children.push(...items);}
   replaceChildren(...items){this.children=items;}
+  scrollIntoView(){this.scrolled=true;}
+  focus(){this.focused=true;}
 }
 const elements=new Map(),storage=new Map(),calls=[];
 let failTest=false,existing=[];
@@ -19,6 +21,12 @@ const context=vm.createContext({
     if(path==='/api/session')return {ok:false,status:401,text:async()=>JSON.stringify({error:'login'})};
     if(path==='/api/backend-test')return {ok:!failTest,status:failTest?503:200,text:async()=>JSON.stringify(failTest?{error:'Testfehler'}:{reachable:true,message:'Vom CT erreichbar (TCP).'})};
     if(path==='/api/routes'&&options.method==='GET')return {ok:true,text:async()=>JSON.stringify(existing)};
+    if(path.startsWith('/api/routes')&&['POST','PUT'].includes(options.method)) {
+      const route=JSON.parse(options.body);
+      route.id=options.method==='POST'?Math.max(0,...existing.map(item=>item.id))+1:Number(path.split('/').at(-1));
+      existing=existing.filter(item=>item.id!==route.id).concat(route);
+      return {ok:true,status:202,text:async()=>JSON.stringify({ok:true,routes:existing,sync_pending:true,message:'Gespeichert. Übertragung läuft.'})};
+    }
     return {ok:true,text:async()=>JSON.stringify({ok:true})};
   }
 });
@@ -63,6 +71,32 @@ async function run(){
   vm.runInContext('renderDiscovery(input)',context);
   await elements.get('discovered').children[0].children[4].children[1].onclick();
   assert.equal(JSON.parse(calls.filter(call=>call.path==='/api/public-test').at(-1).options.body).public_port,8123);
+  const editor=elements.get('routeForm');
+  editor.elements=Object.fromEntries(['id','domain','backend','public_port','enabled'].map(key=>[key,new Element()]));
+  editor.reset=()=>{for(const field of Object.values(editor.elements)){field.value='';field.checked=false}};
+  context.savedRoutes=[{id:25,domain:'edit.example.net',backend:'http://192.168.1.2:8096',public_port:8096,enabled:true}];
+  vm.runInContext('renderRoutes(savedRoutes)',context);
+  await elements.get('routes').children[0].children[3].children[0].onclick();
+  assert.equal(elements.get('routeEditor').open,true,'Editing must open the collapsed editor');
+  assert.equal(editor.elements.domain.focused,true);
+  assert.equal(editor.elements.id.value,25);
+  editor.elements.domain.value='edited.example.net';
+  editor.elements.public_port.value='';
+  const saveButton=new Element(),beforeSave=calls.length;
+  await editor.onsubmit({preventDefault(){},submitter:saveButton,target:editor});
+  const write=calls.slice(beforeSave).find(call=>call.options.method==='PUT');
+  assert.equal(write.path,'/api/routes/25');
+  assert.equal(JSON.parse(write.options.body).public_port,443,'Empty port defaults to 443');
+  assert.equal(calls.slice(beforeSave).length,1,'Saving must render response without waiting for status/logs/stats or another GET');
+  assert.ok(elements.get('routes').children.some(row=>row.children[0].children[0].href==='https://edited.example.net/'));
+  editor.elements.id.value='';editor.elements.domain.value='manual.example.net';editor.elements.backend.value='http://192.168.1.3:8080';editor.elements.public_port.value='';editor.elements.enabled.checked=true;
+  const beforeCreate=calls.length;
+  await editor.onsubmit({preventDefault(){},submitter:saveButton,target:editor});
+  assert.equal(calls.length-beforeCreate,1);
+  assert.equal(calls.at(-1).options.method,'POST');
+  assert.equal(JSON.parse(calls.at(-1).options.body).public_port,443);
+  assert.equal(saveButton.disabled,false);
+  assert.ok(elements.get('routes').children.some(row=>row.children[0].children[0].href==='https://manual.example.net/'));
   assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
   console.log('Web callbacks: CT test, inline errors and existing-domain publication passed.');
 }
