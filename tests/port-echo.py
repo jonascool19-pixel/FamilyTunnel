@@ -19,11 +19,15 @@ def tcp():
         connection, _ = listener.accept()
         threading.Thread(target=tcp_client, args=(connection,), daemon=True).start()
 
+def udp_echo(port, prefix):
+    udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp.setsockopt(socket.IPPROTO_IP, 10, 0)  # Linux: allow fragmentation for the large-datagram test.
+    udp.bind(("0.0.0.0", port))
+    while True:
+        data, address = udp.recvfrom(65535)
+        print("UDP echo received:", port, len(data), address, flush=True)
+        udp.sendto(prefix + data, address)
+
 threading.Thread(target=tcp, daemon=True).start()
-udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-udp.setsockopt(socket.IPPROTO_IP, 10, 0)  # Linux: allow IP fragmentation for the large-datagram test.
-udp.bind(("0.0.0.0", 18081))
-while True:
-    data, address = udp.recvfrom(65535)
-    print("UDP echo received:", len(data), address, flush=True)
-    udp.sendto(data, address)
+threading.Thread(target=udp_echo, args=(18082, b"new:"), daemon=True).start()
+udp_echo(18081, b"")
