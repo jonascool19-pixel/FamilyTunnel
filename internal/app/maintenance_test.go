@@ -68,13 +68,13 @@ func TestCoordinatedMaintenanceRequiresActualBootsAndStablePeer(t *testing.T) {
 		t.Fatal("service restart or duplicate ticks triggered reboot")
 	}
 	serverBoot = testBootB
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 2; i++ {
 		now = now.Add(30 * time.Second)
 		_ = client.maintenanceClientTick(ctx)
 		_ = server.maintenanceServerTick(ctx)
 	}
 	if clientReboots != 0 {
-		t.Fatal("CT rebooted before two stable minutes")
+		t.Fatal("CT rebooted before one stable minute")
 	}
 	// A failed Oracle health check resets the complete stability period.
 	serverReady = false
@@ -82,7 +82,7 @@ func TestCoordinatedMaintenanceRequiresActualBootsAndStablePeer(t *testing.T) {
 	_ = client.maintenanceClientTick(ctx)
 	_ = server.maintenanceServerTick(ctx)
 	serverReady = true
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 3; i++ {
 		now = now.Add(30 * time.Second)
 		if e := client.maintenanceClientTick(ctx); e != nil {
 			t.Fatal(e)
@@ -207,5 +207,38 @@ func TestMaintenanceCalendarAndConsent(t *testing.T) {
 				t.Fatalf("unauthenticated endpoint %s: %d", path, out.Code)
 			}
 		}
+	}
+}
+
+func TestMaintenanceReleasesAfterExactlyOneStableMinute(t *testing.T) {
+	s := maintenanceTestService(t, "server")
+	start := time.Date(2026, 11, 8, 6, 0, 0, 0, time.UTC)
+	now := start.Add(59 * time.Second)
+	s.maintenance = &maintenanceRuntime{Now: func() time.Time { return now }, Boot: func() string { return testBootB }, Ready: func(context.Context) bool { return true }, Uptime: func() time.Duration { return now.Sub(start) }, Reboot: func(context.Context) error { t.Fatal("unexpected reboot"); return nil }}
+	err := s.mutateMaintenance("maintenance_state", func(v *maintenanceState) error {
+		v.Seen = now
+		v.ClientReady = true
+		v.ClientBoot = testBootA
+		v.TestGrant = testGrant
+		v.Job = &maintenanceJob{ID: testGrant, Grant: testGrant, Source: "test", State: "server_rebooting", Created: start, Expires: start.Add(20 * time.Minute), ServerBefore: testBootA, ClientBefore: testBootA, StableSince: start, ReadyAt: now.Add(-30 * time.Second)}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.maintenanceServerTick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := s.maintenanceState()
+	if v.Job.State != "server_rebooting" {
+		t.Fatal("released before 60 seconds")
+	}
+	now = start.Add(time.Minute)
+	if err = s.maintenanceServerTick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	v, _ = s.maintenanceState()
+	if v.Job.State != "waiting_client" {
+		t.Fatalf("not released after 60 seconds: %+v", v.Job)
 	}
 }

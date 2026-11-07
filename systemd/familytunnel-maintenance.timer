@@ -2,7 +2,7 @@
 Description=FamilyTunnel coordinated reboot polling (schedule disabled by default)
 
 [Timer]
-OnBootSec=90s
+OnBootSec=15s
 OnUnitActiveSec=30s
 AccuracySec=1s
 Persistent=false

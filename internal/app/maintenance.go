@@ -78,6 +78,8 @@ type maintenanceRuntime struct {
 	Reboot func(context.Context) error
 }
 
+const maintenanceStableFor = time.Minute
+
 func (s *Service) maintenanceRuntime() maintenanceRuntime {
 	if s.maintenance != nil {
 		return *s.maintenance
@@ -302,7 +304,7 @@ func (s *Service) maintenanceInternalAPI(w http.ResponseWriter, r *http.Request)
 	ackReady := false
 	if in.Action == "ack" {
 		rt := s.maintenanceRuntime()
-		ackReady = rt.Ready(r.Context()) && rt.Uptime() >= 2*time.Minute
+		ackReady = rt.Ready(r.Context()) && rt.Uptime() >= maintenanceStableFor
 	}
 	e := s.mutateMaintenance("maintenance_state", func(v *maintenanceState) error {
 		switch in.Action {
@@ -482,7 +484,7 @@ func (s *Service) maintenanceServerTick(ctx context.Context) error {
 		jobID = ""
 		fresh := !v.Seen.IsZero() && now.Sub(v.Seen) >= 0 && now.Sub(v.Seen) < 90*time.Second && v.ClientReady
 		if !maintenanceActive(v.Job) && maintenanceDue(v, now) {
-			if !fresh || v.ClientGrant != v.Plan.Generation {
+			if !fresh || v.ClientGrant != v.Plan.Generation || uptime < maintenanceStableFor {
 				return nil
 			}
 			v.Job = &maintenanceJob{ID: random(18), Grant: v.Plan.Generation, Source: "schedule", State: "requested", Created: now, Expires: now.Add(20 * time.Minute), ClientBefore: v.ClientBoot, Message: "Geplanter Neustart vorbereitet."}
@@ -518,7 +520,9 @@ func (s *Service) maintenanceServerTick(ctx context.Context) error {
 				return nil
 			}
 			j.ServerAfter = boot
-			if !ready || !fresh || !consent || uptime < 2*time.Minute {
+			// Start stability monitoring as soon as the rebooted services are ready;
+			// do not add a separate uptime delay before this one-minute interval.
+			if !ready || !fresh || !consent {
 				j.StableSince = time.Time{}
 				return nil
 			}
@@ -528,14 +532,14 @@ func (s *Service) maintenanceServerTick(ctx context.Context) error {
 				return nil
 			}
 			j.ReadyAt = now
-			if now.Sub(j.StableSince) >= 2*time.Minute {
+			if now.Sub(j.StableSince) >= maintenanceStableFor {
 				j.State = "waiting_client"
 				j.ReadyAt = now
-				j.Message = "Oracle wurde neu gestartet und ist seit zwei Minuten stabil. CT-Neustart freigegeben."
+				j.Message = "Oracle wurde neu gestartet und ist seit einer Minute stabil. CT-Neustart freigegeben."
 			}
 		}
 		if j.State == "waiting_client" {
-			if !ready || !fresh || !consent || boot != j.ServerAfter || uptime < 2*time.Minute {
+			if !ready || !fresh || !consent || boot != j.ServerAfter || uptime < maintenanceStableFor {
 				j.State = "server_rebooting"
 				j.StableSince = time.Time{}
 				j.ReadyAt = time.Time{}
