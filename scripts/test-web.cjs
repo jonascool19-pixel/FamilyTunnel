@@ -12,7 +12,7 @@ class Element {
   focus(){this.focused=true;}
 }
 const elements=new Map(),storage=new Map(),calls=[];
-let failTest=false,existing=[],rawExisting=[];
+let failTest=false,failSave=false,existing=[],rawExisting=[];
 const context=vm.createContext({
   URL,
   document:{getElementById(id){if(!elements.has(id))elements.set(id,new Element());return elements.get(id)},createElement(){return new Element()},querySelector(){return null},querySelectorAll(){return []}},
@@ -20,6 +20,7 @@ const context=vm.createContext({
   setInterval(){},confirm(){return true},
   fetch:async(path,options)=>{
     calls.push({path,options});
+    if(failSave&&options.method==='PUT')return {ok:false,status:409,text:async()=>JSON.stringify({error:'Port bereits belegt'})};
     if(path==='/api/session')return {ok:false,status:401,text:async()=>JSON.stringify({error:'login'})};
     if(path==='/api/public-test')return {ok:true,text:async()=>JSON.stringify({reachable:true,message:'HTTPS erreichbar'})};
     if(path==='/api/backend-test')return {ok:!failTest,status:failTest?503:200,text:async()=>JSON.stringify(failTest?{error:'Testfehler'}:{reachable:true,message:'Vom CT erreichbar (TCP).'})};
@@ -72,6 +73,7 @@ async function run(){
   assert.equal(saveButton.disabled,false);
   assert.ok(elements.get('routes').children.some(row=>row.children[0].children[0].href==='https://manual.example.net/'));
   vm.runInContext(readFileSync('internal/app/web/ports.js','utf8'),context);
+  vm.runInContext(readFileSync('internal/app/web/editor.js','utf8'),context);
   const rawForm=elements.get('rawForm');
   rawForm.elements=Object.fromEntries(['id','name','target_ip','target_port','public_port','protocol','enabled'].map(key=>[key,new Element()]));
   rawForm.reset=()=>{for(const field of Object.values(rawForm.elements)){field.value='';field.checked=false}};
@@ -122,6 +124,35 @@ async function run(){
   await elements.get('rawActivate').onclick();
   const unifiedPayload=JSON.parse(calls.filter(call=>call.path==='/api/ports/publish').at(-1).options.body);
   assert.equal(unifiedPayload[0].auto,true);assert.equal(unifiedPayload[0].domain,'public.example.net');assert.equal(unifiedPayload[0].target_port,80);
+  vm.runInContext('renderRoutes(unified)',context);
+  const editable=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Jellyfin');
+  await editable.children[4].children[0].onclick();
+  const inline=editable.children.at(-1);
+  const inputs=Object.fromEntries(inline.children.filter(label=>label.children[1]?.name).map(label=>[label.children[1].name,label.children[1]]));
+  inputs.name.value='Mein Medienserver';inputs.target_ip.value='192.168.1.96';inputs.target_port.value='8097';inputs.public_port.value='8098';inputs.domain.value='tv.example.net';
+  vm.runInContext('renderDevices()',context);
+  assert.ok(elements.get('activeServices').children.includes(editable),'Polling must retain an open editor');
+  assert.equal(inputs.name.value,'Mein Medienserver');
+  await inline.onsubmit({preventDefault(){}});
+  const edited=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Medienserver');
+  assert.ok(edited,'Saved name is immediately visible');assert.equal(edited.children[2].href,'https://tv.example.net:8098/');
+  const savedEdit=JSON.parse(calls.filter(call=>call.path==='/api/routes/55'&&call.options.method==='PUT').at(-1).options.body);
+  assert.equal(savedEdit.backend,'http://192.168.1.96:8097');
+  await edited.children[4].children[0].onclick();
+  const failedEditor=edited.children.at(-1),failedName=failedEditor.children.find(label=>label.children[1]?.name==='name').children[1];failedName.value='Noch nicht gespeichert';failSave=true;
+  await failedEditor.onsubmit({preventDefault(){}});failSave=false;
+  assert.equal(failedName.value,'Noch nicht gespeichert');assert.match(failedEditor.children.at(-2).textContent,/Port bereits belegt/);
+  assert.equal(failedEditor.children.at(-1).children[0].disabled,false);
+  await failedEditor.children.at(-1).children[1].onclick();
+  assert.ok(elements.get('activeServices').children.some(card=>card.children[0].textContent==='Mein Medienserver'),'Cancel keeps the saved name');
+  rawExisting[0].enabled=true;context.direct=rawExisting;vm.runInContext('renderPorts(direct)',context);
+  const directCard=elements.get('activeServices').children.find(card=>card.children[2]?.textContent.includes('TCP direkt'));
+  await directCard.children[4].children[0].onclick();
+  const directEditor=directCard.children.at(-1),directFields=Object.fromEntries(directEditor.children.filter(label=>label.children[1]?.name).map(label=>[label.children[1].name,label.children[1]]));
+  directFields.name.value='Mein Spiel';directFields.protocol.value='udp';directFields.public_port.value='17778';
+  await directEditor.onsubmit({preventDefault(){}});
+  const directWrite=JSON.parse(calls.filter(call=>call.path==='/api/ports/1'&&call.options.method==='PUT').at(-1).options.body);
+  assert.equal(directWrite.name,'Mein Spiel');assert.equal(directWrite.protocol,'udp');assert.equal(directWrite.public_port,17778);assert.equal(Object.keys(directWrite).length,7,'Only API-supported fields may be sent');
     assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
   console.log('Web callbacks: unified names, grouped selection, publication, active list and HTTPS test passed.');
 }

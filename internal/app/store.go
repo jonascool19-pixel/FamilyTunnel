@@ -15,6 +15,7 @@ import (
 
 type Route struct {
 	ID         int64  `json:"id"`
+	Name       string `json:"name,omitempty"`
 	Domain     string `json:"domain"`
 	Backend    string `json:"backend"`
 	Enabled    bool   `json:"enabled"`
@@ -41,6 +42,9 @@ func (r Route) validPort() bool {
 var domainRE = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
 
 func (r Route) validate() error {
+	if len(r.Name) > 80 {
+		return errors.New("Name ist zu lang (maximal 80 Bytes)")
+	}
 	if !r.validPort() {
 		return errors.New("Öffentlicher Port: 443 oder 1024–65535; 2019, 8443, 9080 und 9081 sind reserviert")
 	}
@@ -100,10 +104,19 @@ COMMIT;`)
 		db.Close()
 		return nil, e
 	}
+	var hasName int
+	e = db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('routes') WHERE name='name'").Scan(&hasName)
+	if e == nil && hasName == 0 {
+		_, e = db.Exec("ALTER TABLE routes ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+	}
+	if e != nil {
+		db.Close()
+		return nil, e
+	}
 	return db, nil
 }
 func routes(db *sql.DB) ([]Route, error) {
-	rows, e := db.Query("SELECT id,domain,backend,enabled,public_port FROM routes ORDER BY id")
+	rows, e := db.Query("SELECT id,domain,backend,enabled,public_port,name FROM routes ORDER BY id")
 	if e != nil {
 		return nil, e
 	}
@@ -111,7 +124,7 @@ func routes(db *sql.DB) ([]Route, error) {
 	out := []Route{}
 	for rows.Next() {
 		var r Route
-		if e = rows.Scan(&r.ID, &r.Domain, &r.Backend, &r.Enabled, &r.PublicPort); e != nil {
+		if e = rows.Scan(&r.ID, &r.Domain, &r.Backend, &r.Enabled, &r.PublicPort, &r.Name); e != nil {
 			return nil, e
 		}
 		out = append(out, r)
@@ -183,7 +196,7 @@ func replaceRoutes(db *sql.DB, rs []Route) error {
 		return e
 	}
 	for _, r := range rs {
-		if _, e = tx.Exec("INSERT INTO routes(id,domain,backend,enabled,public_port) VALUES(?,?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled, r.port()); e != nil {
+		if _, e = tx.Exec("INSERT INTO routes(id,domain,backend,enabled,public_port,name) VALUES(?,?,?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled, r.port(), r.Name); e != nil {
 			return e
 		}
 	}
