@@ -164,6 +164,12 @@ func TestMaintenanceCalendarAndConsent(t *testing.T) {
 	if e := p.validate(); e != nil {
 		t.Fatal(e)
 	}
+	if next := nextMaintenanceTime(p, time.Date(2026, 3, 29, 0, 0, 0, 0, time.UTC)); next != time.Date(2026, 3, 30, 0, 30, 0, 0, time.UTC) {
+		t.Fatal("nonexistent spring hour was shifted", next)
+	}
+	if next := nextMaintenanceTime(p, time.Date(2026, 3, 28, 3, 0, 0, 0, time.UTC)); next != time.Date(2026, 3, 30, 0, 30, 0, 0, time.UTC) {
+		t.Fatal("tomorrow's nonexistent hour was not skipped", next)
+	}
 	state := maintenanceState{Plan: p}
 	// Repeated 02:30 at the autumn clock change is only one daily slot.
 	if !maintenanceDue(&state, time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC)) {

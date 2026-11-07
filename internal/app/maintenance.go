@@ -178,11 +178,15 @@ func nextMaintenanceTime(p maintenancePlan, now time.Time) time.Time {
 	loc, _ := time.LoadLocation(p.Zone)
 	local := now.In(loc)
 	clock, _ := time.Parse("15:04", p.Time)
-	next := time.Date(local.Year(), local.Month(), local.Day(), clock.Hour(), clock.Minute(), 0, 0, loc)
-	if !next.After(now) {
-		next = next.AddDate(0, 0, 1)
+	// time.Date may normalize a nonexistent spring-time hour to another hour.
+	// Skip that local date instead of rebooting at an unselected time.
+	for day := 0; day < 8; day++ {
+		next := time.Date(local.Year(), local.Month(), local.Day()+day, clock.Hour(), clock.Minute(), 0, 0, loc)
+		if next.After(now) && next.In(loc).Format("15:04") == clock.Format("15:04") {
+			return next.UTC()
+		}
 	}
-	return next.UTC()
+	return now.AddDate(0, 0, 8).UTC()
 }
 
 // Compare-and-swap also serializes the HTTP process with the separate worker.
