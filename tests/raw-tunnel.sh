@@ -54,6 +54,7 @@ ip netns exec "$lan" python3 "$ROOT/tests/port-echo.py" &
 sleep 2
 ip netns exec "$wan" python3 - <<'PY'
 import socket
+import struct
 payload = bytes(range(256)) * 1024
 with socket.create_connection(("198.18.0.1", 28080), timeout=5) as connection:
     connection.sendall(payload)
@@ -61,10 +62,22 @@ with socket.create_connection(("198.18.0.1", 28080), timeout=5) as connection:
     while len(received) < len(payload):
         received += connection.recv(16384)
     assert received == payload, "TCP stream changed"
+# UDP packets with DF set must receive the real tunnel MTU, not silently pass oversized packets.
+with socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP) as errors:
+    errors.settimeout(5)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as oversized:
+        oversized.setsockopt(socket.IPPROTO_IP, 10, 2)  # Linux IP_MTU_DISCOVER / IP_PMTUDISC_DO
+        oversized.sendto(b"m" * 1400, ("198.18.0.1", 28081))
+    packet, _ = errors.recvfrom(65535)
+    header = (packet[0] & 15) * 4
+    assert packet[header:header+2] == bytes([3, 4]), "PMTU ICMP error missing"
+    assert struct.unpack("!H", packet[header+6:header+8])[0] == 1420, "Wrong WireGuard path MTU"
+print("UDP path MTU discovery passed", flush=True)
 for payload in (b"", b"game-query", b"x" * 1400, b"z" * 64000):
     print("Testing UDP payload bytes:", len(payload), flush=True)
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
         udp.settimeout(5)
+        udp.setsockopt(socket.IPPROTO_IP, 10, 0)  # Allow fragmentation for large UDP datagrams.
         udp.sendto(payload, ("198.18.0.1", 28081))
         received, address = udp.recvfrom(65535)
         assert received == payload, "UDP datagram changed"
