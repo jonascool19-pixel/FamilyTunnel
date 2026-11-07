@@ -10,6 +10,7 @@ fi
 systemctl disable --now familytunnel-repair.timer familytunnel-repair.service familytunnel.service familytunnel-firewall.service wg-quick@ft0.service 2>/dev/null || true
 
 if command -v iptables >/dev/null 2>&1; then
+ if [[ -x /usr/local/lib/familytunnel/raw-firewall.sh ]];then /usr/local/lib/familytunnel/raw-firewall.sh remove;fi
  while iptables -w -C INPUT -j FAMILYTUNNEL 2>/dev/null; do iptables -w -D INPUT -j FAMILYTUNNEL || break; done
  iptables -w -F FAMILYTUNNEL 2>/dev/null || true
  iptables -w -X FAMILYTUNNEL 2>/dev/null || true
