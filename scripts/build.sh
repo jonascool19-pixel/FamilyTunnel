@@ -13,7 +13,7 @@ tar -C dist -czf "dist/familytunnel-$version-linux.tar.gz" familytunnel-linux-am
 stage=$(mktemp -d)
 trap 'rm -rf -- "$stage"' EXIT
 mkdir -p "$stage/familytunnel/dist"
-cp -a install.sh install-familytunnel.sh install-server.sh install-client.sh bootstrap.sh purge.sh systemd scripts README.md TESTING.md "$stage/familytunnel/"
+cp -a install.sh install-familytunnel.sh install-server.sh install-client.sh bootstrap.sh purge.sh systemd scripts docs README.md TESTING.md "$stage/familytunnel/"
 cp dist/familytunnel-linux-amd64 dist/familytunnel-linux-arm64 dist/SHA256SUMS "$stage/familytunnel/dist/"
 tar -C "$stage" -czf "dist/familytunnel-$version-install.tar.gz" familytunnel
 (cd dist && sha256sum "familytunnel-$version-install.tar.gz" > "familytunnel-$version-install.tar.gz.sha256")

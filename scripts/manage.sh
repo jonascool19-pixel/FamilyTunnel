@@ -22,7 +22,8 @@ backup() {
  trap 'rm -rf -- "$tmp"' EXIT
  sqlite3 "$STATE/state.db" ".backup '$tmp/state.db'"
  install -m 600 "$STATE/config.json" "$tmp/config.json"
- for f in admin.crt admin.key pairing.json initial-password; do [[ -f $STATE/$f ]] && install -m 600 "$STATE/$f" "$tmp/$f"; done
+ for f in admin.crt admin.key pairing.json initial-password oci-target.json; do [[ -f $STATE/$f ]] && install -m 600 "$STATE/$f" "$tmp/$f"; done
+ if [[ -d $STATE/oci ]];then cp -a "$STATE/oci" "$tmp/oci";fi
  install -m 600 /etc/wireguard/ft0.conf "$tmp/ft0.conf"
  tar -C "$tmp" -czf "$out" .
  chmod 600 "$out"
@@ -48,7 +49,10 @@ restore() {
  install -m 600 "$tmp/state.db" "$STATE/state.db"
  install -m 600 "$tmp/config.json" "$STATE/config.json"
  install -m 600 "$tmp/ft0.conf" /etc/wireguard/ft0.conf
- for f in admin.crt admin.key pairing.json initial-password; do [[ -f $tmp/$f ]] && install -m 600 "$tmp/$f" "$STATE/$f"; done
+ rm -f "$STATE/oci-target.json"
+ for f in admin.crt admin.key pairing.json initial-password oci-target.json; do [[ -f $tmp/$f ]] && install -m 600 "$tmp/$f" "$STATE/$f"; done
+ if [[ -d $tmp/oci ]];then install -d -m 700 "$STATE/oci";cp -a "$tmp/oci/." "$STATE/oci/";fi
+ /usr/local/lib/familytunnel/firewall.sh apply
  systemctl start wg-quick@ft0 familytunnel
  sleep 2
  if ! systemctl is-active --quiet familytunnel; then echo "Restore fehlgeschlagen; vorheriger Stand: $pre" >&2; exit 1; fi

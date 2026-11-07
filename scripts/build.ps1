@@ -20,7 +20,7 @@ $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("familytunnel-stage-" + [g
 try {
   New-Item -ItemType Directory -Force "$stage/familytunnel/dist" | Out-Null
   Copy-Item install.sh,install-familytunnel.sh,install-server.sh,install-client.sh,bootstrap.sh,purge.sh,README.md,TESTING.md -Destination "$stage/familytunnel"
-  Copy-Item systemd,scripts -Destination "$stage/familytunnel" -Recurse
+  Copy-Item systemd,scripts,docs -Destination "$stage/familytunnel" -Recurse
   Copy-Item dist/familytunnel-linux-amd64,dist/familytunnel-linux-arm64,dist/SHA256SUMS -Destination "$stage/familytunnel/dist"
   tar -C $stage -czf "dist/familytunnel-$Version-install.tar.gz" familytunnel
 } finally { Remove-Item -LiteralPath $stage -Recurse -Force }

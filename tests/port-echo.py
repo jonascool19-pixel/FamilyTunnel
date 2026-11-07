@@ -21,6 +21,7 @@ def tcp():
 
 threading.Thread(target=tcp, daemon=True).start()
 udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+udp.setsockopt(socket.IPPROTO_IP, 10, 0)  # Linux: allow IP fragmentation for the large-datagram test.
 udp.bind(("0.0.0.0", 18081))
 while True:
     data, address = udp.recvfrom(65535)
