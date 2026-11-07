@@ -23,8 +23,14 @@ func probeLANService(ctx context.Context, ip string, port int) (string, string) 
 	return name, backend
 }
 func probeLANServiceInfo(ctx context.Context, ip string, port int, allowPrivate bool) (string, string, string) {
+	name, backend, pin, _ := probeLANServiceNamed(ctx, ip, port, allowPrivate, "")
+	return name, backend, pin
+}
+func probeLANServiceNamed(ctx context.Context, ip string, port int, allowPrivate bool, serverName string) (string, string, string, string) {
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
 	pin := ""
-	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 300 * time.Millisecond}).DialContext, TLSHandshakeTimeout: 600 * time.Millisecond, DisableKeepAlives: true}
+	transport := &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 800 * time.Millisecond}).DialContext, TLSHandshakeTimeout: 2 * time.Second, DisableKeepAlives: true}
 	defer transport.CloseIdleConnections()
 	if allowPrivate {
 		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true, VerifyConnection: func(state tls.ConnectionState) error {
@@ -36,17 +42,30 @@ func probeLANServiceInfo(ctx context.Context, ip string, port int, allowPrivate 
 			return nil
 		}}
 	}
-	client := &http.Client{Timeout: 900 * time.Millisecond, Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	client := &http.Client{Timeout: 3 * time.Second, Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) > 3 || req.URL.Host != via[0].URL.Host || req.URL.User != nil {
 			return http.ErrUseLastResponse
 		}
 		return nil
 	}}
-	for _, scheme := range []string{"https", "http"} {
+	type attempt struct{ scheme, name string }
+	attempts := []attempt{{"https", ""}, {"http", ""}}
+	if len(serverName) <= 253 && domainRE.MatchString(serverName) {
+		attempts = append([]attempt{{"https", serverName}}, attempts...)
+	}
+	for _, current := range attempts {
+		scheme := current.scheme
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		transport.TLSClientConfig.ServerName = current.name
 		backend := scheme + "://" + net.JoinHostPort(ip, strconv.Itoa(port))
 		req, err := http.NewRequestWithContext(ctx, "GET", backend+"/", nil)
 		if err != nil {
 			continue
+		}
+		if current.name != "" {
+			req.Host = net.JoinHostPort(current.name, strconv.Itoa(port))
 		}
 		response, err := client.Do(req)
 		if err != nil {
@@ -67,9 +86,9 @@ func probeLANServiceInfo(ctx context.Context, ip string, port int, allowPrivate 
 		if scheme == "http" {
 			pin = ""
 		}
-		return name, backend, pin
+		return name, backend, pin, current.name
 	}
-	return fmt.Sprintf("TCP-Dienst %d", port), "", ""
+	return fmt.Sprintf("TCP-Dienst %d", port), "", "", ""
 }
 
 func (s *Service) discoveryDomain() string {

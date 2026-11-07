@@ -59,7 +59,11 @@ func (s *Service) manualServiceAPI(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, err.Error())
 		return
 	}
-	type found struct{ name, backend, pin string }
+	type found struct{ name, backend, pin, serverName string }
+	serverName := strings.ToLower(strings.TrimSpace(input.Domain))
+	if serverName == "" {
+		serverName = s.discoveryDomain()
+	}
 	results := make([]found, len(numbers))
 	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
@@ -76,17 +80,18 @@ func (s *Service) manualServiceAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			defer func() { <-limit }()
 			name, backend, pin := "Dienst "+strconv.Itoa(port), "", ""
+			tlsName := ""
 			if input.Protocol == "auto" {
 				if s.probeService != nil {
 					name, backend, pin = s.probeService(ctx, input.IP, port)
 				} else {
-					name, backend, pin = probeLANServiceInfo(ctx, input.IP, port, true)
+					name, backend, pin, tlsName = probeLANServiceNamed(ctx, input.IP, port, true, serverName)
 				}
 			}
 			if input.Name != "" {
 				name = input.Name
 			}
-			results[i] = found{name, backend, pin}
+			results[i] = found{name, backend, pin, tlsName}
 		}(i, port)
 	}
 	workers.Wait()
@@ -97,7 +102,7 @@ func (s *Service) manualServiceAPI(w http.ResponseWriter, r *http.Request) {
 	choices := []publishChoice{}
 	for i, port := range numbers {
 		info := results[i]
-		if _, err := s.db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend,backend_cert_sha256) VALUES(?,?,?,?,?) ON CONFLICT(target_ip,target_port) DO UPDATE SET name=excluded.name,backend=excluded.backend,backend_cert_sha256=excluded.backend_cert_sha256", input.IP, port, info.name, info.backend, info.pin); err != nil {
+		if _, err := s.db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend,backend_cert_sha256,backend_server_name) VALUES(?,?,?,?,?,?) ON CONFLICT(target_ip,target_port) DO UPDATE SET name=excluded.name,backend=excluded.backend,backend_cert_sha256=excluded.backend_cert_sha256,backend_server_name=excluded.backend_server_name", input.IP, port, info.name, info.backend, info.pin, info.serverName); err != nil {
 			fail(w, 500, "Erkennung konnte nicht gespeichert werden")
 			return
 		}

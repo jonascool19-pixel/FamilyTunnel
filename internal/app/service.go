@@ -36,10 +36,12 @@ type Service struct {
 	routeChanges  chan struct{}
 	firewallApply func(context.Context) error
 	scanMu        sync.Mutex
+	scanControlMu sync.Mutex
 	scan          *scanJob
 	setupMu       sync.RWMutex
 	setup         setupView
 	probeService  func(context.Context, string, int) (string, string, string)
+	maintenance   *maintenanceRuntime
 }
 
 func newService(c Config) (*Service, error) {
@@ -92,7 +94,9 @@ func (s *Service) handlers() http.Handler {
 	m.HandleFunc("/api/ports/", s.auth.protect(s.portAPI))
 	m.HandleFunc("/api/ports/publish", s.auth.protect(s.publishPortsAPI))
 	m.HandleFunc("/api/services/manual", s.auth.protect(s.manualServiceAPI))
+	m.HandleFunc("/api/services/web-edit", s.auth.protect(s.webServiceEditAPI))
 	m.HandleFunc("/api/scan", s.auth.protect(s.scanAPI))
+	m.HandleFunc("/api/scan/reset", s.auth.protect(s.resetScanAPI))
 	m.HandleFunc("/api/cloud", s.auth.protect(s.cloudAPI))
 	m.HandleFunc("/api/setup-status", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
@@ -114,6 +118,14 @@ func (s *Service) handlers() http.Handler {
 		jsonOut(w, 200, map[string]any{"role": s.cfg.Role, "public_ip": s.cfg.PublicIP, "uptime_seconds": int(time.Since(s.started).Seconds()), "active_connections": s.traffic.active.Load(), "health": s.health})
 	}))
 	m.HandleFunc("/api/stats", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" {
+			s.resetStatsAPI(w, r)
+			return
+		}
+		if r.Method != "GET" {
+			fail(w, 405, "GET or DELETE required")
+			return
+		}
 		if r.Method != "GET" {
 			fail(w, 405, "GET required")
 			return
@@ -126,6 +138,7 @@ func (s *Service) handlers() http.Handler {
 		}
 		jsonOut(w, 200, v)
 	}))
+	m.HandleFunc("/api/maintenance", s.auth.protect(s.maintenanceAPI))
 	m.HandleFunc("/api/logs", s.auth.protect(s.logsAPI))
 	files, _ := fs.Sub(web, "web")
 	m.Handle("/", http.FileServer(http.FS(files)))
@@ -207,13 +220,13 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "use collection URL")
 			return
 		}
-		result, e = s.db.Exec("INSERT INTO routes(domain,backend,enabled,public_port,name,backend_cert_sha256) VALUES(?,?,?,?,?,?)", v.Domain, v.Backend, v.Enabled, v.port(), v.Name, v.BackendCertSHA256)
+		result, e = s.db.Exec("INSERT INTO routes(domain,backend,enabled,public_port,name,backend_cert_sha256,backend_server_name) VALUES(?,?,?,?,?,?,?)", v.Domain, v.Backend, v.Enabled, v.port(), v.Name, v.BackendCertSHA256, v.BackendServerName)
 	case "PUT":
 		if id == 0 {
 			fail(w, 400, "route id required")
 			return
 		}
-		result, e = s.db.Exec("UPDATE routes SET domain=?,backend=?,enabled=?,public_port=?,name=?,backend_cert_sha256=? WHERE id=?", v.Domain, v.Backend, v.Enabled, v.port(), v.Name, v.BackendCertSHA256, id)
+		result, e = s.db.Exec("UPDATE routes SET domain=?,backend=?,enabled=?,public_port=?,name=?,backend_cert_sha256=?,backend_server_name=? WHERE id=?", v.Domain, v.Backend, v.Enabled, v.port(), v.Name, v.BackendCertSHA256, v.BackendServerName, id)
 	case "DELETE":
 		if id == 0 {
 			fail(w, 400, "route id required")
@@ -248,6 +261,7 @@ func (s *Service) internalHandlers() http.Handler {
 		jsonOut(w, 200, map[string]bool{"ok": true, "route_ports_v1": true, "raw_ports_v1": true})
 	}))
 	m.HandleFunc("/internal/config", bearer(s.cfg.Token, s.configAPI))
+	m.HandleFunc("/internal/maintenance", bearer(s.cfg.Token, s.maintenanceInternalAPI))
 	m.HandleFunc("/internal/cloud", bearer(s.cfg.Token, s.cloudAPI))
 	m.HandleFunc("/internal/routes", bearer(s.cfg.Token, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -441,6 +455,13 @@ func Run(args []string) error {
 	dir := os.Getenv("FAMILYTUNNEL_DIR")
 	if dir == "" {
 		dir = "/var/lib/familytunnel"
+	}
+	if args[0] == "maintenance-tick" {
+		c, e := loadConfig(dir)
+		if e != nil {
+			return e
+		}
+		return runMaintenance(c)
 	}
 	if args[0] != "serve" {
 		allowed := map[string]bool{"status": true, "repair": true, "update": true, "backup": true, "restore": true, "uninstall": true}

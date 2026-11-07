@@ -1,0 +1,19 @@
+[Unit]
+Description=FamilyTunnel bounded coordinated reboot worker
+After=network-online.target familytunnel.service
+Wants=network-online.target
+ConditionPathExists=/var/lib/familytunnel/config.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/familytunnel maintenance-tick
+TimeoutStartSec=25s
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/familytunnel
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=192M
+TasksMax=32

@@ -1,0 +1,12 @@
+[Unit]
+Description=FamilyTunnel coordinated reboot polling (schedule disabled by default)
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=30s
+AccuracySec=1s
+Persistent=false
+Unit=familytunnel-maintenance.service
+
+[Install]
+WantedBy=timers.target

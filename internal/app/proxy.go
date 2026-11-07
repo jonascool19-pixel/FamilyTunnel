@@ -112,8 +112,8 @@ func (s *Service) proxy(w http.ResponseWriter, r *http.Request) {
 	}
 	u, _ := url.Parse(target.Backend)
 	p := httputil.NewSingleHostReverseProxy(u)
-	if target.BackendCertSHA256 != "" {
-		transport := backendHTTPTransport(target.BackendCertSHA256)
+	if target.BackendCertSHA256 != "" || target.BackendServerName != "" {
+		transport := backendNamedTransport(target.BackendCertSHA256, target.BackendServerName)
 		defer transport.CloseIdleConnections()
 		p.Transport = transport
 	} else {

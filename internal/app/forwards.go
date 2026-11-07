@@ -110,7 +110,7 @@ func replaceAllRoutes(db *sql.DB, web []Route, ports []PortForward) error {
 		return err
 	}
 	for _, r := range web {
-		if _, err = tx.Exec("INSERT INTO routes(id,domain,backend,enabled,public_port,name,backend_cert_sha256) VALUES(?,?,?,?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled, r.port(), r.Name, r.BackendCertSHA256); err != nil {
+		if _, err = tx.Exec("INSERT INTO routes(id,domain,backend,enabled,public_port,name,backend_cert_sha256,backend_server_name) VALUES(?,?,?,?,?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled, r.port(), r.Name, r.BackendCertSHA256, r.BackendServerName); err != nil {
 			return err
 		}
 	}
@@ -231,6 +231,22 @@ func (s *Service) portAPI(w http.ResponseWriter, r *http.Request) {
 		p.Name = strings.TrimSpace(p.Name)
 		if p.TargetPort == 0 {
 			p.TargetPort = p.PublicPort
+		}
+		if p.Protocol == "both" {
+			id := int64(0)
+			if r.Method == "PUT" {
+				id, err = strconv.ParseInt(suffix, 10, 64)
+				if err != nil {
+					fail(w, 400, "Ungültige ID")
+					return
+				}
+			}
+			ps, err = editBothPorts(ps, p, id)
+			if err != nil {
+				fail(w, 409, err.Error())
+				return
+			}
+			break
 		}
 		if r.Method == "POST" {
 			p.ID = next

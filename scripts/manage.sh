@@ -22,7 +22,7 @@ backup() {
  trap 'rm -rf -- "$tmp"' EXIT
  sqlite3 "$STATE/state.db" ".backup '$tmp/state.db'"
  install -m 600 "$STATE/config.json" "$tmp/config.json"
- for f in admin.crt admin.key pairing.json initial-password oci-target.json; do [[ -f $STATE/$f ]] && install -m 600 "$STATE/$f" "$tmp/$f"; done
+ for f in admin.crt admin.key pairing.json initial-password oci-target.json site-verification.json; do [[ -f $STATE/$f ]] && install -m 600 "$STATE/$f" "$tmp/$f"; done
  if [[ -d $STATE/oci ]];then cp -a "$STATE/oci" "$tmp/oci";fi
  install -m 600 /etc/wireguard/ft0.conf "$tmp/ft0.conf"
  tar -C "$tmp" -czf "$out" .
@@ -44,16 +44,20 @@ restore() {
  sqlite3 "$tmp/state.db" 'PRAGMA integrity_check;' | grep -qx ok
  jq -e '.role == "server" or .role == "client"' "$tmp/config.json" >/dev/null
  pre=$(backup)
+ systemctl stop familytunnel-maintenance.timer familytunnel-maintenance.service 2>/dev/null || true
  systemctl stop familytunnel wg-quick@ft0
  rm -f "$STATE/state.db-wal" "$STATE/state.db-shm"
  install -m 600 "$tmp/state.db" "$STATE/state.db"
  install -m 600 "$tmp/config.json" "$STATE/config.json"
  install -m 600 "$tmp/ft0.conf" /etc/wireguard/ft0.conf
  rm -f "$STATE/oci-target.json"
- for f in admin.crt admin.key pairing.json initial-password oci-target.json; do [[ -f $tmp/$f ]] && install -m 600 "$tmp/$f" "$STATE/$f"; done
+ for f in admin.crt admin.key pairing.json initial-password oci-target.json site-verification.json; do [[ -f $tmp/$f ]] && install -m 600 "$tmp/$f" "$STATE/$f"; done
+ # Restoring an old snapshot must never replay an old reboot order or plan.
+ sqlite3 "$STATE/state.db" "DELETE FROM settings WHERE k LIKE 'maintenance_%';"
  if [[ -d $tmp/oci ]];then install -d -m 700 "$STATE/oci";cp -a "$tmp/oci/." "$STATE/oci/";fi
  /usr/local/lib/familytunnel/firewall.sh apply
  systemctl start wg-quick@ft0 familytunnel
+ systemctl start familytunnel-maintenance.timer 2>/dev/null || true
  sleep 2
  if ! systemctl is-active --quiet familytunnel; then echo "Restore fehlgeschlagen; vorheriger Stand: $pre" >&2; exit 1; fi
  echo "Wiederhergestellt. Sicherheitskopie des vorherigen Stands: $pre"
@@ -92,9 +96,12 @@ update() {
  "$tmp/familytunnel-linux-$arch" selftest
  pre=$(backup)
  old=$(readlink -f /opt/familytunnel/current)
- install -d -m 755 "/opt/familytunnel/releases/$version"
- install -m 755 "$tmp/familytunnel-linux-$arch" "/opt/familytunnel/releases/$version/familytunnel"
- ln -sfn "/opt/familytunnel/releases/$version" /opt/familytunnel/current.new
+ local release_hash release_dir
+ release_hash=$(sha256sum "$tmp/familytunnel-linux-$arch" | awk '{print $1}')
+ release_dir="/opt/familytunnel/releases/$release_hash"
+ install -d -m 755 "$release_dir"
+ if [[ ! -f $release_dir/familytunnel ]]; then install -m 755 "$tmp/familytunnel-linux-$arch" "$release_dir/familytunnel.new";mv -Tf "$release_dir/familytunnel.new" "$release_dir/familytunnel";fi
+ ln -sfn "$release_dir" /opt/familytunnel/current.new
  mv -Tf /opt/familytunnel/current.new /opt/familytunnel/current
  systemctl restart familytunnel
  sleep 3
@@ -111,7 +118,7 @@ update() {
 uninstall() {
  [[ ${1:-} == --yes ]] || { echo 'Nutzung: familytunnel uninstall --yes (Backups bleiben erhalten)' >&2; exit 1; }
  backup >/dev/null
- systemctl disable --now familytunnel-repair.timer familytunnel familytunnel-firewall wg-quick@ft0 2>/dev/null || true
+ systemctl disable --now familytunnel-maintenance.timer familytunnel-repair.timer familytunnel familytunnel-firewall wg-quick@ft0 2>/dev/null || true
  [[ $(jq -r .role "$STATE/config.json" 2>/dev/null) == server ]] && systemctl disable --now caddy 2>/dev/null || true
  rm -f /etc/systemd/system/familytunnel*.service /etc/systemd/system/familytunnel*.timer /etc/systemd/system/caddy.service.d/familytunnel.conf
  rm -f /usr/local/bin/familytunnel /etc/wireguard/ft0.conf

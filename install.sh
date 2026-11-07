@@ -194,7 +194,7 @@ systemctl daemon-reload
 systemctl enable --now wg-quick@ft0
 systemctl enable --now familytunnel-firewall
 if [[ $role == server ]]; then systemctl enable --now caddy;systemctl restart caddy;fi
-systemctl enable --now familytunnel familytunnel-repair.timer
+systemctl enable --now familytunnel familytunnel-repair.timer familytunnel-maintenance.timer
 systemctl restart familytunnel
 done_step 'Systemdienste wurden gestartet.'
 step 'Abschließende Selbsttests ausführen'

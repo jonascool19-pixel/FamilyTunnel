@@ -6,6 +6,7 @@ class Element {
   constructor(){this.children=[];this.hidden=true;this.value='';this.textContent='';}
   set value(value){this._value=String(value)}
   get value(){return this._value}
+  setAttribute(key,value){this[key]=value;}
   append(...items){this.children.push(...items);}
   replaceChildren(...items){this.children=items;}
   scrollIntoView(){this.scrolled=true;}
@@ -20,12 +21,15 @@ const context=vm.createContext({
   setInterval(){},confirm(){return confirmAllowed},
   fetch:async(path,options)=>{
     calls.push({path,options});
+    if(path.startsWith('/api/stats'))return {ok:true,text:async()=>JSON.stringify(options.method==='DELETE'?{message:'Statistik zurückgesetzt'}:[])};
+    if(path==='/api/scan/reset')return {ok:true,text:async()=>JSON.stringify({message:'Suchergebnisse zurückgesetzt'})};
+    if(path==='/api/maintenance') {const body=options.body?JSON.parse(options.body):{};return {ok:true,text:async()=>JSON.stringify({role:'client',worker_installed:true,state:{plan:body.plan||{enabled:false,time:'07:00',zone:'Europe/Berlin',mode:'daily'},job:body.action==='test'?{state:'requested',message:'Echter Test angefordert',created:new Date().toISOString()}:null}})};}
     if(path==='/api/logs'){if(options.method==='DELETE'){logEntries=[];return {ok:true,text:async()=>JSON.stringify({message:'Ereignisse gelöscht'})}}return {ok:true,text:async()=>JSON.stringify(logEntries)}}
     if(path==='/api/scan'){if(failScan||(failScanGet&&options.method==='GET'))return {ok:false,status:503,text:async()=>JSON.stringify({error:'Suche vorübergehend nicht verfügbar'})};return {ok:true,text:async()=>JSON.stringify({running:options.method==='POST',done:0,total:65535,found:0,targets:'192.168.1.29',mode:'full'})}}
     if(path==='/api/ports'&&options.method==='GET')return {ok:true,text:async()=>JSON.stringify(rawExisting)};
     if(path==='/api/setup-status')return {ok:true,text:async()=>JSON.stringify({state:'configured',message:'Tunnel und Oracle-Regeln eingerichtet'})};
     if(path==='/api/port-test'){const input=JSON.parse(options.body),udp=rawExisting.find(p=>p.id===input.id)?.protocol==='udp';return {ok:true,text:async()=>JSON.stringify(udp?{state:'unknown',reachable:null,message:'UDP nicht zuverlässig prüfbar'}:{state:'reachable',reachable:true,message:'TCP-Verbindung möglich'})}}
-    if(failSave&&options.method==='PUT')return {ok:false,status:409,text:async()=>JSON.stringify({error:'Port bereits belegt'})};
+    if(failSave&&(options.method==='PUT'||path==='/api/services/web-edit'))return {ok:false,status:409,text:async()=>JSON.stringify({error:'Port bereits belegt'})};
     if(path==='/api/session')return {ok:false,status:401,text:async()=>JSON.stringify({error:'login'})};
     if(path==='/api/public-test')return {ok:true,text:async()=>JSON.stringify({reachable:true,message:'HTTPS erreichbar'})};
     if(path==='/api/backend-test'){if(holdBackend)return new Promise(resolve=>{releaseBackend=resolve});return {ok:!failTest,status:failTest?503:200,text:async()=>JSON.stringify(failTest?{error:'Testfehler'}:{reachable:true,message:'Vom CT erreichbar (TCP).'})}};
@@ -35,6 +39,7 @@ const context=vm.createContext({
       return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Portfreigaben gespeichert'})};
     }
     if(path==='/api/ports/publish'&&options.method==='POST')return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Einrichtung läuft im Hintergrund'})};
+    if(path==='/api/services/web-edit') { const input=JSON.parse(options.body),route=input.route;existing=existing.filter(x=>x.id!==route.id).concat(route);return {ok:true,status:202,text:async()=>JSON.stringify({routes:existing,ports:rawExisting,message:'Gespeichert'})}; }
     if(path==='/api/services/manual')return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,routes:existing,message:'Automatisch erkannt und gespeichert'})};
     if(path==='/api/ports/1'&&options.method==='PUT'){
       rawExisting[0]={...JSON.parse(options.body),id:1};
@@ -143,7 +148,7 @@ async function run(){
   await inline.onsubmit({preventDefault(){}});
   const edited=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Medienserver');
   assert.ok(edited,'Saved name is immediately visible');assert.equal(edited.children[2].href,'https://tv.example.net:8098/');
-  const savedEdit=JSON.parse(calls.filter(call=>call.path==='/api/routes/55'&&call.options.method==='PUT').at(-1).options.body);
+  const savedEdit=JSON.parse(calls.filter(call=>call.path==='/api/services/web-edit').at(-1).options.body).route;
   assert.equal(savedEdit.backend,'http://192.168.1.96:8097');
   await edited.children[4].children[0].onclick();
   const failedEditor=edited.children.at(-1),failedName=failedEditor.children.find(label=>label.children[1]?.name==='name').children[1];failedName.value='Noch nicht gespeichert';failSave=true;
@@ -193,6 +198,15 @@ async function run(){
   vm.runInContext(readFileSync('internal/app/web/automatic.js','utf8'),context);
   const manual=elements.get('manualServiceForm');manual.elements=Object.fromEntries(['name','target_ip','ports','protocol'].map(key=>[key,new Element()]));manual.reset=()=>{};manual.elements.name.value='Media';manual.elements.target_ip.value='192.168.1.95';manual.elements.ports.value='8096,8920';manual.elements.protocol.value='auto';await manual.onsubmit({preventDefault(){},target:manual,submitter:saveButton});const manualWrite=JSON.parse(calls.filter(call=>call.path==='/api/services/manual').at(-1).options.body);assert.equal(manualWrite.ports,'8096,8920');assert.equal(manualWrite.protocol,'auto');assert.equal(manualWrite.domain,'public.example.net');
   context.autoTarget={id:99,name:'Automatischer Test',protocol:'tcp',target_ip:'192.168.1.40',target_port:7778,public_port:17778,enabled:true};vm.runInContext("renderPorts([autoTarget]);renderSetup({state:'configured',message:'Regeln eingerichtet'})",context);elements.get('app').hidden=false;const beforeAuto=calls.length;vm.runInContext('queueAutomaticCheck(autoTarget)',context);await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));elements.get('app').hidden=true;const automaticCalls=calls.slice(beforeAuto).filter(call=>call.path==='/api/port-test');assert.equal(automaticCalls.length,2,'Activation runs local and public tests without a button click');assert.deepEqual(automaticCalls.map(call=>JSON.parse(call.options.body).location),['local','public']);const autoCard=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Automatischer Test');assert.equal(Number(autoCard.children[3].children.at(-1).value),100,'100 percent requires confirmed public access');assert.match(autoCard.children[3].textContent,/TCP-Verbindung bestätigt/);
+  assert.equal(vm.runInContext('formatBytes(1500000)',context),'1,5 MB');assert.equal(vm.runInContext('formatBytes(1000000000)',context),'1 GB');assert.equal(vm.runInContext('formatBytes(1000000000000)',context),'1 TB');
+  const maintenanceForm=elements.get('maintenanceForm')||context.document.getElementById('maintenanceForm');maintenanceForm.elements=Object.fromEntries(['enabled','time','zone','mode'].map(key=>[key,new Element()]));
+  vm.runInContext(readFileSync('internal/app/web/dashboard.js','utf8'),context);
+  await elements.get('tab-maintenance').onclick();assert.equal(elements.get('panel-maintenance').hidden,false);assert.equal(elements.get('panel-services').hidden,true);
+  context.maintenanceData={role:'client',worker_installed:true,state:{plan:{enabled:false,time:'07:00',zone:'Europe/Berlin',mode:'daily'}}};vm.runInContext('renderMaintenance(maintenanceData)',context);maintenanceForm.elements.time.value='05:45';maintenanceForm.oninput();vm.runInContext('renderMaintenance(maintenanceData)',context);assert.equal(maintenanceForm.elements.time.value,'05:45','Polling must preserve edited schedule');
+  maintenanceForm.elements.mode.value='interval24';maintenanceForm.elements.enabled.checked=true;await maintenanceForm.onsubmit({preventDefault(){},target:maintenanceForm});let schedule=JSON.parse(calls.filter(x=>x.path==='/api/maintenance'&&x.options.method==='POST').at(-1).options.body);assert.equal(schedule.plan.time,'05:45');assert.equal(schedule.plan.mode,'interval24');
+  const beforeTestCancel=calls.length;confirmAllowed=false;await elements.get('maintenanceTest').onclick();assert.equal(calls.length,beforeTestCancel,'Cancelling does not schedule real reboots');confirmAllowed=true;await elements.get('maintenanceTest').onclick();assert.equal(JSON.parse(calls.at(-1).options.body).confirmation,'RESTART_BOTH');assert.match(elements.get('maintenanceJobState').textContent,/Echter Test/);
+  const beforeResetCancel=calls.length;confirmAllowed=false;await elements.get('resetScan').onclick();await elements.get('resetStats').onclick();assert.equal(calls.length,beforeResetCancel,'Cancelled resets do not delete anything');confirmAllowed=true;
+  await elements.get('resetStats').onclick();assert.ok(calls.some(x=>x.path==='/api/stats'&&x.options.method==='DELETE'));await elements.get('resetScan').onclick();assert.ok(calls.some(x=>x.path==='/api/scan/reset'&&x.options.method==='POST'));assert.equal(vm.runInContext('selectedPorts.size',context),0);
   console.log('Web callbacks: manual automatic setup, automatic checks, progress, editing and diagnostics passed.');
 }
 run().catch(error=>{console.error(error);process.exitCode=1});

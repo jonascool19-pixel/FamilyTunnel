@@ -47,6 +47,7 @@ func (s *Service) planAutoWeb(choice publishChoice, web *[]Route, ports *[]PortF
 	}
 	var backend string
 	_ = s.db.QueryRow("SELECT backend FROM scan_services WHERE target_ip=? AND target_port=?", choice.TargetIP, choice.TargetPort).Scan(&backend)
+	detected := backend != ""
 	if backend == "" {
 		for _, r := range *web {
 			u, e := url.Parse(r.Backend)
@@ -73,6 +74,10 @@ func (s *Service) planAutoWeb(choice publishChoice, web *[]Route, ports *[]PortF
 			if choice.Name != "" {
 				(*web)[i].Name = choice.Name
 			}
+			if choice.ReplaceDirect && detected {
+				(*web)[i].Backend = backend
+				_ = s.db.QueryRow("SELECT backend_cert_sha256,backend_server_name FROM scan_services WHERE target_ip=? AND target_port=?", choice.TargetIP, choice.TargetPort).Scan(&(*web)[i].BackendCertSHA256, &(*web)[i].BackendServerName)
+			}
 			return true, nil
 		}
 	}
@@ -94,6 +99,7 @@ func (s *Service) planAutoWeb(choice publishChoice, web *[]Route, ports *[]PortF
 	candidate := Route{Domain: domain, Backend: backend, Enabled: true, PublicPort: choice.TargetPort}
 	_ = s.db.QueryRow("SELECT name FROM scan_services WHERE target_ip=? AND target_port=?", choice.TargetIP, choice.TargetPort).Scan(&candidate.Name)
 	_ = s.db.QueryRow("SELECT backend_cert_sha256 FROM scan_services WHERE target_ip=? AND target_port=?", choice.TargetIP, choice.TargetPort).Scan(&candidate.BackendCertSHA256)
+	_ = s.db.QueryRow("SELECT backend_server_name FROM scan_services WHERE target_ip=? AND target_port=?", choice.TargetIP, choice.TargetPort).Scan(&candidate.BackendServerName)
 	if choice.Name != "" {
 		candidate.Name = choice.Name
 	}
@@ -114,8 +120,16 @@ func (s *Service) planAutoWeb(choice publishChoice, web *[]Route, ports *[]PortF
 				return true, nil
 			}
 			index = i
-			candidate = r
-			candidate.Enabled = true
+			candidate.ID = r.ID
+			candidate.Domain = r.Domain
+			candidate.PublicPort = r.PublicPort
+			if candidate.Name == "" {
+				candidate.Name = r.Name
+			}
+			if candidate.BackendCertSHA256 == "" && candidate.Backend == r.Backend {
+				candidate.BackendCertSHA256 = r.BackendCertSHA256
+				candidate.BackendServerName = r.BackendServerName
+			}
 		}
 	}
 	filtered := make([]PortForward, 0, len(*ports))

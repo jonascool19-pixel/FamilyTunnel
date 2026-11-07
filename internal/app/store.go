@@ -17,6 +17,7 @@ type Route struct {
 	ID                int64  `json:"id"`
 	Name              string `json:"name,omitempty"`
 	BackendCertSHA256 string `json:"backend_cert_sha256,omitempty"`
+	BackendServerName string `json:"backend_server_name,omitempty"`
 	Domain            string `json:"domain"`
 	Backend           string `json:"backend"`
 	Enabled           bool   `json:"enabled"`
@@ -43,6 +44,9 @@ func (r Route) validPort() bool {
 var domainRE = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
 
 func (r Route) validate() error {
+	if r.BackendServerName != "" && (len(r.BackendServerName) > 253 || !domainRE.MatchString(r.BackendServerName) || !strings.HasPrefix(r.Backend, "https://")) {
+		return errors.New("Ungültiger lokaler HTTPS-Servername")
+	}
 	if r.BackendCertSHA256 != "" {
 		if !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(r.BackendCertSHA256) || !strings.HasPrefix(r.Backend, "https://") {
 			return errors.New("Ungültige Bindung an das lokale HTTPS-Zertifikat")
@@ -120,20 +124,22 @@ COMMIT;`)
 		return nil, e
 	}
 	for _, table := range []string{"routes", "scan_services"} {
-		var found int
-		e = db.QueryRow("SELECT count(*) FROM pragma_table_info('" + table + "') WHERE name='backend_cert_sha256'").Scan(&found)
-		if e == nil && found == 0 {
-			_, e = db.Exec("ALTER TABLE " + table + " ADD COLUMN backend_cert_sha256 TEXT NOT NULL DEFAULT ''")
-		}
-		if e != nil {
-			db.Close()
-			return nil, e
+		for _, column := range []string{"backend_cert_sha256", "backend_server_name"} {
+			var found int
+			e = db.QueryRow("SELECT count(*) FROM pragma_table_info('"+table+"') WHERE name=?", column).Scan(&found)
+			if e == nil && found == 0 {
+				_, e = db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " TEXT NOT NULL DEFAULT ''")
+			}
+			if e != nil {
+				db.Close()
+				return nil, e
+			}
 		}
 	}
 	return db, nil
 }
 func routes(db *sql.DB) ([]Route, error) {
-	rows, e := db.Query("SELECT id,domain,backend,enabled,public_port,name,backend_cert_sha256 FROM routes ORDER BY id")
+	rows, e := db.Query("SELECT id,domain,backend,enabled,public_port,name,backend_cert_sha256,backend_server_name FROM routes ORDER BY id")
 	if e != nil {
 		return nil, e
 	}
@@ -141,7 +147,7 @@ func routes(db *sql.DB) ([]Route, error) {
 	out := []Route{}
 	for rows.Next() {
 		var r Route
-		if e = rows.Scan(&r.ID, &r.Domain, &r.Backend, &r.Enabled, &r.PublicPort, &r.Name, &r.BackendCertSHA256); e != nil {
+		if e = rows.Scan(&r.ID, &r.Domain, &r.Backend, &r.Enabled, &r.PublicPort, &r.Name, &r.BackendCertSHA256, &r.BackendServerName); e != nil {
 			return nil, e
 		}
 		out = append(out, r)
@@ -213,7 +219,7 @@ func replaceRoutes(db *sql.DB, rs []Route) error {
 		return e
 	}
 	for _, r := range rs {
-		if _, e = tx.Exec("INSERT INTO routes(id,domain,backend,enabled,public_port,name,backend_cert_sha256) VALUES(?,?,?,?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled, r.port(), r.Name, r.BackendCertSHA256); e != nil {
+		if _, e = tx.Exec("INSERT INTO routes(id,domain,backend,enabled,public_port,name,backend_cert_sha256,backend_server_name) VALUES(?,?,?,?,?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled, r.port(), r.Name, r.BackendCertSHA256, r.BackendServerName); e != nil {
 			return e
 		}
 	}

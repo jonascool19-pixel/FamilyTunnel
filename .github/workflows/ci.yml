@@ -18,11 +18,15 @@ jobs:
           cache: true
       - name: Go tests
         run: go test ./...
+      - name: Race detection for controller and maintenance
+        run: go test -race -timeout 180s ./internal/app
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Web interface regressions
-        run: node --check internal/app/web/app.js && node --check internal/app/web/ports.js && node scripts/test-web.cjs
+        run: |
+          for script in internal/app/web/*.js; do node --check "$script"; done
+          node scripts/test-web.cjs
       - name: Go vet
         run: go vet ./...
       - name: Shell syntax

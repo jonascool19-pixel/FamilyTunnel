@@ -29,3 +29,13 @@ func backendHTTPTransport(pin string) *http.Transport {
 	}
 	return transport
 }
+func backendNamedTransport(pin, serverName string) *http.Transport {
+	transport := backendHTTPTransport(pin)
+	if serverName != "" {
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		transport.TLSClientConfig.ServerName = serverName
+	}
+	return transport
+}

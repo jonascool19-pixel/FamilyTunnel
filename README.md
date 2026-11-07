@@ -2,7 +2,7 @@
 
 FamilyTunnel veröffentlicht HTTP-/HTTPS-Webdienste sowie ausgewählte TCP-/UDP-Dienste aus einem Heimnetz über eine Oracle-Cloud-VM. Ein Ubuntu-24.04-LXC baut WireGuard ausgehend auf; am Heimrouter ist keine Portfreigabe nötig. Caddy beendet TLS für Webseiten. Direkte TCP-/UDP-Freigaben verwenden eigene NAT-/FORWARD-Regeln durch WireGuard.
 
-Neu: **Dienste suchen und einrichten** verbindet Web- und Portsuche. Erkannte Dienstnamen und Ports erscheinen nach lokaler IP gruppiert. Ein Gerät oder einzelne Dienste auswählen; HTTPS (mit einmal hinterlegter Domain), direkte Ports und Oracle-Freigaben werden im Hintergrund eingerichtet. Eine gemeinsame Liste zeigt aktivierte Dienste und ihre Adressen. [Details und Grenzen](docs/tcp-udp.md). Zur gewünschten Neustartfolge gibt es ein [geprüftes Konzept](docs/maintenance-design.md); ein automatischer Neustart ist nicht eingerichtet.
+Neu: **Dienste suchen und einrichten** verbindet Web- und Portsuche. Erkannte Dienstnamen und Ports erscheinen nach lokaler IP gruppiert. Ein Gerät oder einzelne Dienste auswählen; HTTPS (mit einmal hinterlegter Domain), direkte Ports und Oracle-Freigaben werden im Hintergrund eingerichtet. Eine gemeinsame Liste zeigt aktivierte Dienste und ihre Adressen. [Details und Grenzen](docs/tcp-udp.md). Unter Neustarts gibt es einen frei einstellbaren, zunächst ausgeschalteten [koordinierten Zeitplan](docs/maintenance-design.md) und einen ausdrücklich bestätigten echten Neustart-Test.
 
 ## Eine Domain, mehrere HTTPS-Ports
 
@@ -141,7 +141,7 @@ familytunnel uninstall --yes
 
 ## Statistiken und Healthchecks
 
-Der Heim-Controller zählt HTTP-Requests, Fehler sowie eingehende und ausgehende HTTP-Nutzdaten pro Domain und UTC-Stunde. Die GUI aggregiert Stunde, Tag, Monat oder Gesamt. TLS-, TCP- und WireGuard-Overhead ist nicht enthalten. Healthchecks prüfen WireGuard-Handshakes, SQLite, Server-Synchronisierung, Caddy, DNS-A-Auflösung und Backend-TCP-Erreichbarkeit. Der Reparatur-Timer läuft alle zwei Minuten.
+Der Heim-Controller zählt HTTP-Requests, Fehler sowie eingehende und ausgehende HTTP-Nutzdaten pro Domain und UTC-Stunde. Die GUI aggregiert Stunde, Tag, Monat oder Gesamt und zeigt Datenmengen automatisch als kB/MB/GB/TB. Der Statistikreset leert nach Bestätigung gespeicherte Werte und den noch offenen Zählerpuffer. TLS-, TCP- und WireGuard-Overhead ist nicht enthalten. Healthchecks prüfen WireGuard-Handshakes, SQLite, Server-Synchronisierung, Caddy, DNS-A-Auflösung und Backend-TCP-Erreichbarkeit. Der Reparatur-Timer läuft alle zwei Minuten.
 
 Der Verbindungsstatus in der Weboberfläche aktualisiert sich automatisch alle 15 Sekunden. Der manuelle Knopf bleibt für eine sofortige Aktualisierung erhalten. Der Installer verwendet auf Server und Client farbige Banner, Fortschrittsstufen und einen eingerahmten Abschlussbereich.
 
@@ -157,7 +157,7 @@ Die echte Neuinstallation, Wiederholungsinstallation, Neustart-, Tunnelabbruch-,
 
 ## Bekannte Grenzen
 
-- Version 0.1.0 veröffentlicht HTTP/HTTPS-Backends; rohe TCP/UDP-Dienste und WebSocket-Upgrades sind nicht implementiert.
+- HTTP/HTTPS und direkte TCP/UDP-Freigaben sind implementiert. WebSocket-Upgrades bleiben in dieser Version nicht unterstützt.
 - DDNS wird geprüft und bei falscher IP gewarnt. Automatisches Ändern ist ohne Anbieter und Zugangsdaten nicht möglich.
 - OCI-Regeln werden nur automatisiert, wenn eine konfigurierte OCI CLI mit passenden IAM-Rechten vorhanden ist.
 - Das Installationspaket wird aktuell aus dem `main`-Branch geladen. Für unveränderliche Produktionsinstallationen sollte künftig ein signiertes GitHub-Release verwendet werden.
