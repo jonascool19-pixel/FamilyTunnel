@@ -18,6 +18,11 @@ jobs:
           cache: true
       - name: Go tests
         run: go test ./...
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Web interface regressions
+        run: node --check internal/app/web/app.js && node scripts/test-web.cjs
       - name: Go vet
         run: go vet ./...
       - name: Shell syntax
@@ -28,3 +33,8 @@ jobs:
         run: python3 -m py_compile scripts/oci-nsg.py
       - name: Linux builds
         run: bash ./scripts/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: familytunnel-linux-and-installer
+          path: dist/
+          if-no-files-found: error
