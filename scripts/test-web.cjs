@@ -170,9 +170,9 @@ async function run(){
   media=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Medienserver');assert.match(media.children[5].children[1].textContent,/Testfehler/,'Failed result remains visible after polling');
   assert.ok(storage.get('ft-service-checks').includes('Testfehler'),'Last checks survive reload with timestamps');
   const udpCard=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Spiel');await udpCard.children[4].children[2].onclick();assert.match(udpCard.children[5].children[0].textContent,/UDP nicht zuverlässig/);assert.notEqual(udpCard.children[5].children[0].className,'test-ok');
-  vm.runInContext("renderSetup({state:'working',message:'Oracle wird eingerichtet'})",context);assert.match(media.children[3].textContent,/Einrichtung läuft/);
+  vm.runInContext("renderSetup({state:'working',message:'Oracle wird eingerichtet'})",context);assert.match(elements.get('setupStatus').textContent,/Einrichtung läuft/);assert.match(media.children[3].textContent,/Heimnetz-Test fehlgeschlagen/,'A new setup refresh must retain the actual service result');
   failScanGet=true;elements.get('app').hidden=false;await vm.runInContext('refreshPorts()',context);elements.get('app').hidden=true;failScanGet=false;
-  assert.match(elements.get('activeServices').children.find(card=>card.children[0].textContent==='Mein Medienserver').children[3].textContent,/Regeln eingerichtet/,'A scan error must not hide setup status');
+  assert.match(elements.get('setupStatus').textContent,/Regeln eingerichtet/,'A scan error must not hide setup status');
   vm.runInContext("renderPortScan({running:false,results:[{target_ip:'192.168.1.29',target_port:7777,name:'Mein Spiel'}]})",context);
   const deviceForScan=elements.get('rawRows').children.find(card=>card.children[0].children[1].textContent.includes('192.168.1.29'));
   await deviceForScan.children[3].onclick();
@@ -182,7 +182,12 @@ async function run(){
   assert.match(vm.runInContext('formatLocalTime("2026-11-07T20:01:58Z","Europe/Berlin")',context),/21:01:58/,'UTC is displayed in the intended timezone');
   context.logSample=[{at:'2026-11-07T20:01:58Z',kind:'test',message:'Beispiel'}];vm.runInContext('renderLogs(logSample)',context);assert.match(elements.get('logTimezone').textContent,/Ortszeit/);
   const beforeClear=calls.length;confirmAllowed=false;await elements.get('clearLogs').onclick();assert.equal(calls.length,beforeClear,'Cancelling never deletes logs');confirmAllowed=true;await elements.get('clearLogs').onclick();assert.ok(calls.some(call=>call.path==='/api/logs'&&call.options.method==='DELETE'));assert.match(elements.get('logs').textContent,/Keine Ereignisse/);
-  let report='';context.captureReport=async text=>{report=text};vm.runInContext('copyText=captureReport',context);await elements.get('copyReport').onclick();assert.match(report,/DIREKTE PORTFREIGABEN/);assert.match(report,/EINRICHTUNG/);assert.match(report,/UTC:/);
+  context.tcpConfirmed={id:88,name:'TCP-Test',protocol:'tcp',target_ip:'192.168.1.95',target_port:8920,public_port:8920,enabled:true};
+  vm.runInContext('renderPorts([tcpConfirmed])',context);
+  const tcpCard=elements.get('activeServices').children.find(card=>card.children[0].textContent==='TCP-Test');
+  await tcpCard.children[4].children[2].onclick();assert.match(tcpCard.children[3].textContent,/Öffentliche TCP-Verbindung bestätigt/);assert.match(tcpCard.children[5].children[0].textContent,/Öffentliche TCP-Verbindung bestätigt/);assert.equal(tcpCard.children[3].className,'test-ok');
+  vm.runInContext('renderDevices()',context);assert.match(elements.get('activeServices').children.find(card=>card.children[0].textContent==='TCP-Test').children[3].textContent,/Öffentliche TCP-Verbindung bestätigt/,'Polling must not replace confirmed reachability with setup text');
+    let report='';context.captureReport=async text=>{report=text};vm.runInContext('copyText=captureReport',context);await elements.get('copyReport').onclick();assert.match(report,/DIREKTE PORTFREIGABEN/);assert.match(report,/EINRICHTUNG/);assert.match(report,/UTC:/);
     assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
   console.log('Web callbacks: unified names, grouped selection, publication, active list and HTTPS test passed.');
 }

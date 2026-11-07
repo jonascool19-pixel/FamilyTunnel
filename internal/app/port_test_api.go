@@ -105,6 +105,6 @@ func (s *Service) portTestAPI(w http.ResponseWriter, r *http.Request) {
 	if input.Location == "local" {
 		result["message"] = "Vom Heim-CT erreichbar (TCP): " + net.JoinHostPort(ip, strconv.Itoa(port))
 	} else {
-		result["message"] = "Öffentliche TCP-Verbindung zur Oracle-Adresse " + net.JoinHostPort(ip, strconv.Itoa(port)) + " möglich. Die Funktion des Dienstes ist damit noch nicht bestätigt."
+		result["message"] = "Öffentliche TCP-Verbindung bestätigt: " + net.JoinHostPort(ip, strconv.Itoa(port)) + ". Geprüft wurde der TCP-Verbindungsaufbau."
 	}
 }
