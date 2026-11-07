@@ -115,9 +115,11 @@ func (s *Service) runPortScan(ctx context.Context, job *scanJob, ips []string, p
 				conn, err := (&net.Dialer{Timeout: 250 * time.Millisecond}).DialContext(ctx, "tcp", net.JoinHostPort(t.ip, strconv.Itoa(t.port)))
 				if err == nil {
 					conn.Close()
+					name, backend := probeLANService(ctx, t.ip, t.port)
 					s.routeMu.Lock()
 					result, e := s.db.Exec("INSERT INTO scan_results(target_ip,target_port,protocol,found_at) SELECT ?,?,'tcp',? WHERE (SELECT count(*) FROM scan_results)<4096 ON CONFLICT(target_ip,target_port,protocol) DO UPDATE SET found_at=excluded.found_at", t.ip, t.port, time.Now().UTC().Format(time.RFC3339))
-					p := PortForward{Name: "Gefundener TCP-Dienst", Protocol: "tcp", TargetIP: t.ip, TargetPort: t.port, PublicPort: t.port}
+					_, _ = s.db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM scan_results WHERE target_ip=? AND target_port=? AND protocol='tcp') ON CONFLICT(target_ip,target_port) DO UPDATE SET name=excluded.name,backend=excluded.backend", t.ip, t.port, name, backend, t.ip, t.port)
+					p := PortForward{Name: name, Protocol: "tcp", TargetIP: t.ip, TargetPort: t.port, PublicPort: t.port}
 					if p.validate() == nil {
 						_, _ = s.db.Exec("INSERT INTO port_forwards(name,protocol,target_ip,target_port,public_port,enabled) SELECT ?,?,?,?,?,0 WHERE (SELECT count(*) FROM port_forwards)<200 ON CONFLICT(protocol,public_port) DO NOTHING", p.Name, p.Protocol, p.TargetIP, p.TargetPort, p.PublicPort)
 					}
@@ -167,17 +169,19 @@ func (s *Service) scanAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
 		snapshot := s.scanSnapshot()
-		rows, err := s.db.Query("SELECT target_ip,target_port,protocol FROM scan_results ORDER BY target_ip,target_port LIMIT 4096")
+		snapshot["domain"] = s.discoveryDomain()
+		snapshot["oracle_ip"] = s.cfg.PublicIP
+		rows, err := s.db.Query("SELECT r.target_ip,r.target_port,r.protocol,COALESCE(s.name,''),COALESCE(s.backend,'') FROM scan_results r LEFT JOIN scan_services s ON s.target_ip=r.target_ip AND s.target_port=r.target_port ORDER BY r.target_ip,r.target_port LIMIT 4096")
 		if err != nil {
 			fail(w, 500, "Datenbank nicht verfügbar")
 			return
 		}
 		out := []map[string]any{}
 		for rows.Next() {
-			var ip, proto string
+			var ip, proto, name, backend string
 			var port int
-			if rows.Scan(&ip, &port, &proto) == nil {
-				out = append(out, map[string]any{"target_ip": ip, "target_port": port, "protocol": proto})
+			if rows.Scan(&ip, &port, &proto, &name, &backend) == nil {
+				out = append(out, map[string]any{"target_ip": ip, "target_port": port, "protocol": proto, "name": name, "backend": backend})
 			}
 		}
 		rows.Close()
@@ -194,6 +198,7 @@ func (s *Service) scanAPI(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			Targets string `json:"targets"`
 			Mode    string `json:"mode"`
+			Domain  string `json:"domain"`
 		}
 		if decode(w, r, &input) != nil {
 			fail(w, 400, "Ungültige Suchanfrage")
@@ -202,6 +207,11 @@ func (s *Service) scanAPI(w http.ResponseWriter, r *http.Request) {
 		ips, ports, err := scanPlan(hostOnly(s.cfg.Listen), input.Targets, input.Mode)
 		if err != nil {
 			fail(w, 400, err.Error())
+			return
+		}
+		input.Domain = strings.ToLower(strings.TrimSpace(input.Domain))
+		if input.Domain != "" && (!domainRE.MatchString(input.Domain) || len(input.Domain) > 253) {
+			fail(w, 400, "Eine gültige öffentliche Domain ohne https:// eingeben")
 			return
 		}
 		s.scanMu.Lock()
@@ -224,6 +234,9 @@ func (s *Service) scanAPI(w http.ResponseWriter, r *http.Request) {
 		job := &scanJob{Running: true, Total: len(ips) * len(ports), Started: time.Now().UTC().Format(time.RFC3339), Message: "TCP-Ports werden geprüft. UDP erfordert eine passende Dienstprüfung oder manuelle Freigabe.", cancel: cancel, finished: make(chan struct{})}
 		s.scan = job
 		s.scanMu.Unlock()
+		if input.Domain != "" {
+			_ = setSetting(s.db, "discovery_domain", input.Domain)
+		}
 		encoded, _ := json.Marshal(job)
 		_ = setSetting(s.db, "last_port_scan", string(encoded))
 		go func() { defer cancel(); s.runPortScan(ctx, job, ips, ports) }()
