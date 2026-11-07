@@ -78,11 +78,27 @@ for payload in (b"", b"game-query", b"x" * 1400, b"z" * 64000):
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
         udp.settimeout(5)
         udp.setsockopt(socket.IPPROTO_IP, 10, 0)  # Allow fragmentation for large UDP datagrams.
+        if payload == b"game-query":
+            udp.bind(("198.18.0.2", 33000))
         udp.sendto(payload, ("198.18.0.1", 28081))
         received, address = udp.recvfrom(65535)
         assert received == payload, "UDP datagram changed"
         assert address == ("198.18.0.1", 28081), "UDP return mapping wrong"
 print("Real TCP streams and UDP datagrams passed through WireGuard and both NAT stages")
+PY
+# Reuse the same external client tuple after editing the target. Old NAT state must be removed.
+for role in server client;do sqlite3 "$state/$role/state.db" 'UPDATE port_forwards SET target_port=18082 WHERE protocol="udp";';done
+ip netns exec "$vps" env FT_STATE="$state/server" bash "$ROOT/scripts/firewall.sh" apply
+ip netns exec "$ct" env FT_STATE="$state/client" bash "$ROOT/scripts/firewall.sh" apply
+ip netns exec "$wan" python3 - <<'PY'
+import socket
+with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+    client.settimeout(5)
+    client.bind(("198.18.0.2", 33000))
+    client.sendto(b"same-client", ("198.18.0.1", 28081))
+    response, address = client.recvfrom(65535)
+    assert response == b"new:same-client", "Stale UDP NAT target survived an edit"
+print("Editing UDP target with the same external client tuple passed")
 PY
 # Disable one mapping. New connections must fail, while the other protocol remains configured.
 for role in server client;do sqlite3 "$state/$role/state.db" 'UPDATE port_forwards SET enabled=0 WHERE protocol="tcp";';done

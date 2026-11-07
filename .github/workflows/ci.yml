@@ -26,7 +26,10 @@ jobs:
       - name: Go vet
         run: go vet ./...
       - name: Shell syntax
-        run: bash -n install.sh install-familytunnel.sh install-server.sh install-client.sh bootstrap.sh purge.sh scripts/*.sh tests/*.sh
+        run: |
+          for script in install.sh install-familytunnel.sh install-server.sh install-client.sh bootstrap.sh purge.sh scripts/*.sh tests/*.sh; do
+            bash -n "$script"
+          done
       - name: Pairing code round-trip
         run: bash tests/pairing-code.sh
       - name: Python syntax

@@ -169,6 +169,12 @@ func (s *Service) portAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, p := range incoming {
+			p.Protocol = strings.ToLower(strings.TrimSpace(p.Protocol))
+			p.TargetIP = strings.TrimSpace(p.TargetIP)
+			p.Name = strings.TrimSpace(p.Name)
+			if p.TargetPort == 0 {
+				p.TargetPort = p.PublicPort
+			}
 			if suffix == "import" {
 				p.Enabled = false
 			}
