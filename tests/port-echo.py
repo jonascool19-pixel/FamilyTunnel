@@ -24,4 +24,5 @@ udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 udp.bind(("0.0.0.0", 18081))
 while True:
     data, address = udp.recvfrom(65535)
+    print("UDP echo received:", len(data), address, flush=True)
     udp.sendto(data, address)
