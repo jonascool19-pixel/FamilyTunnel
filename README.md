@@ -1,6 +1,8 @@
 # FamilyTunnel 0.1.0
 
-FamilyTunnel veröffentlicht HTTP-Dienste aus einem Heimnetz über eine Oracle-Cloud-VM. Ein Ubuntu-24.04-LXC baut den WireGuard-Tunnel ausgehend auf; am Heimrouter ist keine Portfreigabe nötig. Caddy auf dem VPS beendet TLS und sendet Anfragen durch den Tunnel an den Controller im CT, der sie an private Heimnetz-Adressen weiterleitet.
+FamilyTunnel veröffentlicht HTTP-/HTTPS-Webdienste sowie ausgewählte TCP-/UDP-Dienste aus einem Heimnetz über eine Oracle-Cloud-VM. Ein Ubuntu-24.04-LXC baut WireGuard ausgehend auf; am Heimrouter ist keine Portfreigabe nötig. Caddy beendet TLS für Webseiten. Direkte TCP-/UDP-Freigaben verwenden eigene NAT-/FORWARD-Regeln durch WireGuard.
+
+Neu: [TCP/UDP, tiefe Suche und optionale Oracle-Automation](docs/tcp-udp.md). Zur gewünschten Neustartfolge gibt es ein [geprüftes Konzept](docs/maintenance-design.md); ein automatischer Neustart ist nicht eingerichtet.
 
 ## Eine Domain, mehrere HTTPS-Ports
 
@@ -10,7 +12,7 @@ Die Heimnetzsuche schlägt den gefundenen Port vor. Für niedrige oder reservier
 
 **Aktualisierung:** zuerst Oracle-Server, danach Heim-CT mit dem Installer aktualisieren. Die Rolle wird aus der bestehenden Konfiguration übernommen. Der Installer sichert die vorhandene Datenbank nach `/var/backups/familytunnel/pre-install-*.db`; die Migration übernimmt bestehende Weiterleitungen unverändert auf Port 443. Ein alter Server wird vor der Synchronisierung zusätzlicher Ports erkannt und muss zuerst aktualisiert werden.
 
-Die Ubuntu-Firewall auf Oracle übernimmt ausschließlich die aktiven veröffentlichten TCP-Ports und entfernt deren FamilyTunnel-Freigabe beim Deaktivieren/Löschen. **In der OCI-Sicherheitsliste oder einer zugewiesenen NSG muss jeder zusätzliche öffentliche TCP-Port ebenfalls freigegeben werden.** Beispiel: Quelle `0.0.0.0/0`, Protokoll TCP, Quellports alle, Zielport 8096, zustandsbehaftet. OCI-Regeln werden nicht automatisch geändert. 80/TCP muss für die Zertifikatsausstellung erreichbar bleiben; 443/TCP und 51820/UDP bleiben wie bisher freigegeben.
+Die Ubuntu-Firewall auf Oracle übernimmt ausschließlich die aktiven veröffentlichten TCP-Ports und entfernt deren FamilyTunnel-Freigabe beim Deaktivieren/Löschen. **In der OCI-Sicherheitsliste oder einer zugewiesenen NSG muss jeder zusätzliche öffentliche TCP-Port ebenfalls freigegeben werden.** Beispiel: Quelle `0.0.0.0/0`, Protokoll TCP, Quellports alle, Zielport 8096, zustandsbehaftet. Ohne die optionale OCI-Anbindung werden Cloud-Regeln nicht automatisch geändert; mit eingerichteter Anbindung gilt der Abschnitt TCP/UDP-Automation. 80/TCP muss für die Zertifikatsausstellung erreichbar bleiben; 443/TCP und 51820/UDP bleiben wie bisher freigegeben.
 
 „Öffentlich testen“ prüft den ausgewählten Port über TLS mit Zertifikatsprüfung und verlangt eine an Domain und Port gebundene Antwortbestätigung des Heim-Controllers. Die Prüfung startet vom CT über die öffentliche Oracle-IP; sie ist kein Test aus allen externen Netzen.
 
@@ -18,7 +20,7 @@ Porttests: `node scripts/test-web.cjs` und `go test ./...`. Mit gesetztem `CADDY
 
 ## Voraussetzungen
 
-- Oracle Ubuntu 24.04 VM mit öffentlicher IPv4 und bestehendem NSG
+- Oracle Ubuntu 24.04 VM mit öffentlicher IPv4 und zugewiesener Sicherheitsliste oder NSG
 - Proxmox Ubuntu 24.04 LXC, bevorzugt unprivilegiert, 1 Core, 1 GB RAM, 8 GB Disk
 - WireGuard-Unterstützung des Proxmox-Host-Kernels muss im CT verfügbar sein
 - DNS-A/AAAA-Konfiguration: Ein A-Record jedes Dienstes zeigt auf die VPS-IPv4; ein irreführender AAAA-Record sollte entfernt werden
