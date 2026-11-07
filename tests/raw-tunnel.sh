@@ -52,6 +52,9 @@ ip netns exec "$vps" env FT_STATE="$state/server" bash "$ROOT/scripts/firewall.s
 ip netns exec "$ct" env FT_STATE="$state/client" bash "$ROOT/scripts/firewall.sh" apply
 ip netns exec "$lan" python3 "$ROOT/tests/port-echo.py" &
 sleep 2
+if [[ -n ${FT_TEST_BINARY:-} ]];then
+ ip netns exec "$ct" env FT_FULL_SCAN_TARGET=192.168.99.2 "$FT_TEST_BINARY" -test.run '^TestFullPortSweepInNamespace$' -test.v -test.timeout=75s
+fi
 ip netns exec "$wan" python3 - <<'PY'
 import socket
 import struct
