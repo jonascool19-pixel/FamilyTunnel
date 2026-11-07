@@ -6,10 +6,42 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestFullPortSweepInNamespace(t *testing.T) {
+	target := os.Getenv("FT_FULL_SCAN_TARGET")
+	if target == "" {
+		t.Skip("network namespace integration only")
+	}
+	ips, ports, err := scanPlan("192.168.99.1", target, "full")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := openDB(filepath.Join(t.TempDir(), "db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	s := &Service{db: db}
+	job := &scanJob{Running: true, Total: len(ports), cancel: cancel, finished: make(chan struct{})}
+	s.scan = job
+	s.runPortScan(ctx, job, ips, ports)
+	if job.Running || job.Done != 65535 || job.Found != 1 {
+		t.Fatalf("incomplete sweep: done=%d found=%d message=%s", job.Done, job.Found, job.Message)
+	}
+	ps, err := portForwards(db)
+	if err != nil || len(ps) != 1 || ps[0].TargetPort != 18080 || ps[0].Enabled {
+		t.Fatalf("unexpected proposals: %+v %v", ps, err)
+	}
+	t.Log("All 65535 TCP ports scanned; actual open port persisted as inactive proposal")
+}
 
 func TestForwardValidation(t *testing.T) {
 	good := PortForward{Protocol: "udp", TargetIP: "192.168.1.29", TargetPort: 7777, PublicPort: 17777}
