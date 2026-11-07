@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type PortForward struct {
@@ -122,6 +123,7 @@ func replaceAllRoutes(db *sql.DB, web []Route, ports []PortForward) error {
 }
 
 func (s *Service) notifyRoutes() {
+	s.setSetup("working", "Auswahl gespeichert. Tunnel und Oracle-Freigaben werden eingerichtet.")
 	select {
 	case s.routeChanges <- struct{}{}:
 	default:
@@ -286,6 +288,11 @@ func (s *Service) portAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) configAPI(w http.ResponseWriter, r *http.Request) {
+	// This authenticated internal endpoint runs from the background sync worker.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(120 * time.Second))
+	ctx, cancel := context.WithTimeout(r.Context(), 110*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
 	if r.Method != "POST" || s.cfg.Role != "server" {
 		fail(w, 405, "POST auf Oracle erforderlich")
 		return
@@ -321,9 +328,6 @@ func (s *Service) configAPI(w http.ResponseWriter, r *http.Request) {
 	if err = s.applyCaddy(config.Web); err == nil {
 		err = s.applyPortFirewall(r.Context())
 	}
-	if err == nil {
-		err = s.applyCloud(r.Context())
-	}
 	if err != nil {
 		_ = replaceAllRoutes(s.db, oldWeb, oldPorts)
 		_ = s.applyCaddy(oldWeb)
@@ -331,7 +335,17 @@ func (s *Service) configAPI(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "Konfiguration zurückgerollt: "+err.Error())
 		return
 	}
-	jsonOut(w, 200, map[string]bool{"ok": true})
+	ready := s.ensureCloudTarget(r.Context())
+	cloudMessage := "Einmalige Oracle-Verbindung fehlt. Die lokale Weiterleitung ist eingerichtet; die Cloud-Freigabe ist noch nicht bestätigt."
+	if ready {
+		if err = s.applyCloud(r.Context()); err != nil {
+			ready = false
+			cloudMessage = err.Error()
+		} else {
+			cloudMessage = "Tunnel und Oracle-Regeln eingerichtet. Die Erreichbarkeit des eigentlichen Dienstes bitte mit dem Dienst prüfen."
+		}
+	}
+	jsonOut(w, 200, map[string]any{"ok": true, "cloud_ready": ready, "cloud_message": cloudMessage})
 }
 
 // Write only database configuration here; no arbitrary command execution endpoint exists.

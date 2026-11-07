@@ -13,6 +13,26 @@ import (
 	"strings"
 )
 
+func (s *Service) ensureCloudTarget(ctx context.Context) bool {
+	file := filepath.Join(s.cfg.Dir, "oci-target.json")
+	if b, err := os.ReadFile(file); err == nil {
+		var target cloudTarget
+		return json.Unmarshal(b, &target) == nil && target.Enabled
+	}
+	if _, err := exec.LookPath("oci"); err != nil {
+		return false
+	}
+	output, err := exec.CommandContext(ctx, "python3", "/usr/local/lib/familytunnel/oci-nsg.py", "--discover-target", "--state-dir", s.cfg.Dir).Output()
+	if err != nil {
+		return false
+	}
+	var target cloudTarget
+	if json.Unmarshal(output, &target) != nil || !target.Enabled {
+		return false
+	}
+	return writeAtomic(file, output, 0600) == nil
+}
+
 type cloudTarget struct {
 	Enabled bool   `json:"enabled"`
 	Kind    string `json:"kind"`

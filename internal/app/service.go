@@ -37,6 +37,8 @@ type Service struct {
 	firewallApply func(context.Context) error
 	scanMu        sync.Mutex
 	scan          *scanJob
+	setupMu       sync.RWMutex
+	setup         setupView
 }
 
 func newService(c Config) (*Service, error) {
@@ -87,8 +89,16 @@ func (s *Service) handlers() http.Handler {
 	m.HandleFunc("/api/discover", s.auth.protect(s.discoveryAPI))
 	m.HandleFunc("/api/ports", s.auth.protect(s.portAPI))
 	m.HandleFunc("/api/ports/", s.auth.protect(s.portAPI))
+	m.HandleFunc("/api/ports/publish", s.auth.protect(s.publishPortsAPI))
 	m.HandleFunc("/api/scan", s.auth.protect(s.scanAPI))
 	m.HandleFunc("/api/cloud", s.auth.protect(s.cloudAPI))
+	m.HandleFunc("/api/setup-status", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			fail(w, 405, "GET erforderlich")
+			return
+		}
+		jsonOut(w, 200, s.setupSnapshot())
+	}))
 	m.HandleFunc("/api/backend-test", s.auth.protect(s.backendTestAPI))
 	m.HandleFunc("/api/public-test", s.auth.protect(s.publicTestAPI))
 	m.HandleFunc("/api/status", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
@@ -239,10 +249,7 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	event(s.db, "route", "route configuration changed")
-	select {
-	case s.routeChanges <- struct{}{}:
-	default:
-	}
+	s.notifyRoutes()
 	rs, err := routes(s.db)
 	if err != nil {
 		fail(w, 500, "Gespeichert, aber Liste konnte nicht gelesen werden")

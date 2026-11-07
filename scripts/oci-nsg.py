@@ -6,6 +6,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import urllib.request
 
 MARKER = "FamilyTunnel managed "
 
@@ -76,13 +77,45 @@ def sync_target(target, rules):
     else:
         raise ValueError("Choose nsg or security-list")
 
+def discover_target():
+    request = urllib.request.Request("http://169.254.169.254/opc/v2/vnics/",
+                                     headers={"Authorization": "Bearer Oracle"})
+    # Metadata must never leave the VM through an environment-configured proxy.
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=2) as response:
+        vnics = json.loads(response.read(65536))
+    if not isinstance(vnics, list) or len(vnics) != 1:
+        raise ValueError("Multiple network interfaces: choose the Oracle target once in advanced settings")
+    vnic = run("network", "vnic", "get", "--vnic-id", vnics[0]["vnicId"])["data"]
+    groups = vnic.get("nsg-ids", [])
+    if len(groups) == 1:
+        return {"enabled": True, "kind": "nsg", "id": groups[0]}
+    if groups:
+        raise ValueError("Multiple NSGs: choose the Oracle target once in advanced settings")
+    subnet = run("network", "subnet", "get", "--subnet-id", vnic["subnet-id"])["data"]
+    lists = subnet.get("security-list-ids", [])
+    if len(lists) != 1:
+        raise ValueError("Multiple security lists: choose the Oracle target once in advanced settings")
+    return {"enabled": True, "kind": "security-list", "id": lists[0]}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("nsg", nargs="?")
     parser.add_argument("vnic", nargs="?")
     parser.add_argument("--target-file")
+    parser.add_argument("--discover-target", action="store_true")
     parser.add_argument("--state-dir", default="/var/lib/familytunnel")
     args = parser.parse_args()
+    if args.discover_target:
+        if not shutil.which("oci"):
+            raise RuntimeError("OCI CLI is not installed")
+        config = os.path.join(args.state_dir, "oci", "config")
+        if os.path.isfile(config):
+            os.environ["OCI_CLI_CONFIG_FILE"] = config
+        else:
+            os.environ.setdefault("OCI_CLI_AUTH", "instance_principal")
+        print(json.dumps(discover_target()))
+        return
     if args.target_file:
         with open(args.target_file, encoding="utf-8") as file:
             target = json.load(file)

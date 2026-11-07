@@ -169,6 +169,9 @@ func caddyfile(rs []Route) string {
 
 var controlHTTP = &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{Proxy: nil}}
 
+// Cloud rule batches may take longer; this client is used only by the background worker.
+var configHTTP = &http.Client{Timeout: 120 * time.Second, Transport: &http.Transport{Proxy: nil}}
+
 func (s *Service) applyCaddy(rs []Route) error {
 	b := []byte(caddyfile(rs))
 	req, e := http.NewRequest("POST", s.cfg.CaddyURL+"/load", bytes.NewReader(b))
@@ -187,12 +190,14 @@ func (s *Service) applyCaddy(rs []Route) error {
 	}
 	return nil
 }
-func (s *Service) syncRoutes() error {
-	web, err := routes(s.db)
-	if err != nil {
-		return err
-	}
-	ports, err := portForwards(s.db)
+func (s *Service) syncRoutes() (syncErr error) {
+	s.setSetup("working", "Tunnel und Freigaben werden im Hintergrund eingerichtet.")
+	defer func() {
+		if syncErr != nil {
+			s.setSetup("failed", syncErr.Error())
+		}
+	}()
+	web, ports, err := s.configSnapshot()
 	if err != nil {
 		return err
 	}
@@ -245,13 +250,37 @@ func (s *Service) syncRoutes() error {
 	}
 	req.Header.Set("Authorization", "Bearer "+s.cfg.Token)
 	req.Header.Set("Content-Type", "application/json")
-	response, err = controlHTTP.Do(req)
+	response, err = configHTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("Oracle-Übertragung über WireGuard fehlgeschlagen")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
 		return decodeSyncError(response)
+	}
+	var receipt struct {
+		CloudReady bool   `json:"cloud_ready"`
+		Message    string `json:"cloud_message"`
+	}
+	if err = json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&receipt); err != nil {
+		return fmt.Errorf("Oracle-Antwort konnte nicht geprüft werden")
+	}
+	currentWeb, currentPorts, err := s.configSnapshot()
+	if err != nil {
+		return err
+	}
+	if configDigest(web, ports) != configDigest(currentWeb, currentPorts) {
+		s.setSetup("working", "Eine neuere Auswahl wird noch übertragen.")
+		return nil
+	}
+	if receipt.CloudReady {
+		s.setSetup("configured", receipt.Message)
+	} else {
+		note := receipt.Message
+		if note == "" {
+			note = "Oracle-Verbindung einmalig einrichten oder Oracle-Server aktualisieren. Cloud-Freigaben sind noch nicht bestätigt."
+		}
+		s.setSetup("needs_connection", note)
 	}
 	return nil
 }
