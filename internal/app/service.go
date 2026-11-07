@@ -39,6 +39,7 @@ type Service struct {
 	scan          *scanJob
 	setupMu       sync.RWMutex
 	setup         setupView
+	probeService  func(context.Context, string, int) (string, string, string)
 }
 
 func newService(c Config) (*Service, error) {
@@ -90,6 +91,7 @@ func (s *Service) handlers() http.Handler {
 	m.HandleFunc("/api/ports", s.auth.protect(s.portAPI))
 	m.HandleFunc("/api/ports/", s.auth.protect(s.portAPI))
 	m.HandleFunc("/api/ports/publish", s.auth.protect(s.publishPortsAPI))
+	m.HandleFunc("/api/services/manual", s.auth.protect(s.manualServiceAPI))
 	m.HandleFunc("/api/scan", s.auth.protect(s.scanAPI))
 	m.HandleFunc("/api/cloud", s.auth.protect(s.cloudAPI))
 	m.HandleFunc("/api/setup-status", s.auth.protect(func(w http.ResponseWriter, r *http.Request) {
@@ -205,13 +207,13 @@ func (s *Service) routeAPI(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "use collection URL")
 			return
 		}
-		result, e = s.db.Exec("INSERT INTO routes(domain,backend,enabled,public_port,name) VALUES(?,?,?,?,?)", v.Domain, v.Backend, v.Enabled, v.port(), v.Name)
+		result, e = s.db.Exec("INSERT INTO routes(domain,backend,enabled,public_port,name,backend_cert_sha256) VALUES(?,?,?,?,?,?)", v.Domain, v.Backend, v.Enabled, v.port(), v.Name, v.BackendCertSHA256)
 	case "PUT":
 		if id == 0 {
 			fail(w, 400, "route id required")
 			return
 		}
-		result, e = s.db.Exec("UPDATE routes SET domain=?,backend=?,enabled=?,public_port=?,name=? WHERE id=?", v.Domain, v.Backend, v.Enabled, v.port(), v.Name, id)
+		result, e = s.db.Exec("UPDATE routes SET domain=?,backend=?,enabled=?,public_port=?,name=?,backend_cert_sha256=? WHERE id=?", v.Domain, v.Backend, v.Enabled, v.port(), v.Name, v.BackendCertSHA256, id)
 	case "DELETE":
 		if id == 0 {
 			fail(w, 400, "route id required")

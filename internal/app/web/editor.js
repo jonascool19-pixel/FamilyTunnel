@@ -17,7 +17,7 @@ function openActiveEditor(p,card){
   try{
    const common={name:fields.name.value.trim(),enabled:Boolean(p.enabled)};
    const payload=route?{...route,...common,domain:fields.domain.value.trim().toLowerCase(),backend:fields.scheme.value+'://'+fields.target_ip.value.trim()+':'+rawPort(fields.target_port.value),public_port:readPort(fields.public_port.value)}:{...directPayload(p),...common,protocol:fields.protocol.value,target_ip:fields.target_ip.value.trim(),target_port:rawPort(fields.target_port.value),public_port:rawPublic(fields.public_port.value)};
-   const result=await api((route?'routes/':'ports/')+(route?route.id:p.id),'PUT',payload);
+   if(route&&fields.scheme.value==='http')payload.backend_cert_sha256='';const result=await api((route?'routes/':'ports/')+(route?route.id:p.id),'PUT',payload);
    activeEditor=null;if(route)renderRoutes(result.routes);else renderPorts(result.ports);
    renderSetup({state:'working',message:result.message});portMessage(result.message);
   }catch(problem){error.textContent=problem.message;portMessage(problem.message)}finally{save.disabled=false}

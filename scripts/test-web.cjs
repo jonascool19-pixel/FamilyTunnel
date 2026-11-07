@@ -35,6 +35,7 @@ const context=vm.createContext({
       return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Portfreigaben gespeichert'})};
     }
     if(path==='/api/ports/publish'&&options.method==='POST')return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Einrichtung läuft im Hintergrund'})};
+    if(path==='/api/services/manual')return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,routes:existing,message:'Automatisch erkannt und gespeichert'})};
     if(path==='/api/ports/1'&&options.method==='PUT'){
       rawExisting[0]={...JSON.parse(options.body),id:1};
       return {ok:true,status:202,text:async()=>JSON.stringify({ports:rawExisting,message:'Geändert'})};
@@ -189,6 +190,9 @@ async function run(){
   vm.runInContext('renderDevices()',context);assert.match(elements.get('activeServices').children.find(card=>card.children[0].textContent==='TCP-Test').children[3].textContent,/Öffentliche TCP-Verbindung bestätigt/,'Polling must not replace confirmed reachability with setup text');
     let report='';context.captureReport=async text=>{report=text};vm.runInContext('copyText=captureReport',context);await elements.get('copyReport').onclick();assert.match(report,/DIREKTE PORTFREIGABEN/);assert.match(report,/EINRICHTUNG/);assert.match(report,/UTC:/);
     assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
-  console.log('Web callbacks: unified names, grouped selection, publication, active list and HTTPS test passed.');
+  vm.runInContext(readFileSync('internal/app/web/automatic.js','utf8'),context);
+  const manual=elements.get('manualServiceForm');manual.elements=Object.fromEntries(['name','target_ip','ports','protocol'].map(key=>[key,new Element()]));manual.reset=()=>{};manual.elements.name.value='Media';manual.elements.target_ip.value='192.168.1.95';manual.elements.ports.value='8096,8920';manual.elements.protocol.value='auto';await manual.onsubmit({preventDefault(){},target:manual,submitter:saveButton});const manualWrite=JSON.parse(calls.filter(call=>call.path==='/api/services/manual').at(-1).options.body);assert.equal(manualWrite.ports,'8096,8920');assert.equal(manualWrite.protocol,'auto');assert.equal(manualWrite.domain,'public.example.net');
+  context.autoTarget={id:99,name:'Automatischer Test',protocol:'tcp',target_ip:'192.168.1.40',target_port:7778,public_port:17778,enabled:true};vm.runInContext("renderPorts([autoTarget]);renderSetup({state:'configured',message:'Regeln eingerichtet'})",context);elements.get('app').hidden=false;const beforeAuto=calls.length;vm.runInContext('queueAutomaticCheck(autoTarget)',context);await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));elements.get('app').hidden=true;const automaticCalls=calls.slice(beforeAuto).filter(call=>call.path==='/api/port-test');assert.equal(automaticCalls.length,2,'Activation runs local and public tests without a button click');assert.deepEqual(automaticCalls.map(call=>JSON.parse(call.options.body).location),['local','public']);const autoCard=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Automatischer Test');assert.equal(Number(autoCard.children[3].children.at(-1).value),100,'100 percent requires confirmed public access');assert.match(autoCard.children[3].textContent,/TCP-Verbindung bestätigt/);
+  console.log('Web callbacks: manual automatic setup, automatic checks, progress, editing and diagnostics passed.');
 }
 run().catch(error=>{console.error(error);process.exitCode=1});

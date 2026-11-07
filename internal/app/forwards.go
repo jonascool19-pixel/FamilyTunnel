@@ -110,7 +110,7 @@ func replaceAllRoutes(db *sql.DB, web []Route, ports []PortForward) error {
 		return err
 	}
 	for _, r := range web {
-		if _, err = tx.Exec("INSERT INTO routes(id,domain,backend,enabled,public_port,name) VALUES(?,?,?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled, r.port(), r.Name); err != nil {
+		if _, err = tx.Exec("INSERT INTO routes(id,domain,backend,enabled,public_port,name,backend_cert_sha256) VALUES(?,?,?,?,?,?,?)", r.ID, r.Domain, r.Backend, r.Enabled, r.port(), r.Name, r.BackendCertSHA256); err != nil {
 			return err
 		}
 	}

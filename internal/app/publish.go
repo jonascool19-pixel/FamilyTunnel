@@ -9,11 +9,13 @@ import (
 )
 
 type publishChoice struct {
-	TargetIP   string `json:"target_ip"`
-	TargetPort int    `json:"target_port"`
-	Protocol   string `json:"protocol"`
-	Auto       bool   `json:"auto"`
-	Domain     string `json:"domain"`
+	TargetIP      string `json:"target_ip"`
+	TargetPort    int    `json:"target_port"`
+	Protocol      string `json:"protocol"`
+	Auto          bool   `json:"auto"`
+	Domain        string `json:"domain"`
+	Name          string `json:"name,omitempty"`
+	ReplaceDirect bool   `json:"replace_direct,omitempty"`
 }
 
 func backendMatchesChoice(raw string, choice publishChoice) bool {
@@ -38,7 +40,9 @@ func (s *Service) planAutoWeb(choice publishChoice, web *[]Route, ports *[]PortF
 	}
 	for _, p := range *ports {
 		if p.Enabled && p.Protocol == "tcp" && p.TargetIP == choice.TargetIP && p.TargetPort == choice.TargetPort {
-			return true, nil
+			if !choice.ReplaceDirect {
+				return true, nil
+			}
 		}
 	}
 	var backend string
@@ -64,8 +68,11 @@ func (s *Service) planAutoWeb(choice publishChoice, web *[]Route, ports *[]PortF
 	if backend == "" {
 		return false, nil
 	}
-	for _, r := range *web {
+	for i, r := range *web {
 		if backendMatchesChoice(r.Backend, choice) && r.Enabled {
+			if choice.Name != "" {
+				(*web)[i].Name = choice.Name
+			}
 			return true, nil
 		}
 	}
@@ -86,6 +93,10 @@ func (s *Service) planAutoWeb(choice publishChoice, web *[]Route, ports *[]PortF
 	}
 	candidate := Route{Domain: domain, Backend: backend, Enabled: true, PublicPort: choice.TargetPort}
 	_ = s.db.QueryRow("SELECT name FROM scan_services WHERE target_ip=? AND target_port=?", choice.TargetIP, choice.TargetPort).Scan(&candidate.Name)
+	_ = s.db.QueryRow("SELECT backend_cert_sha256 FROM scan_services WHERE target_ip=? AND target_port=?", choice.TargetIP, choice.TargetPort).Scan(&candidate.BackendCertSHA256)
+	if choice.Name != "" {
+		candidate.Name = choice.Name
+	}
 	if candidate.PublicPort < 1024 {
 		candidate.PublicPort = 443
 	}
@@ -109,7 +120,7 @@ func (s *Service) planAutoWeb(choice publishChoice, web *[]Route, ports *[]PortF
 	}
 	filtered := make([]PortForward, 0, len(*ports))
 	for _, p := range *ports {
-		if !p.Enabled && p.Protocol == "tcp" && p.TargetIP == choice.TargetIP && p.TargetPort == choice.TargetPort {
+		if (!p.Enabled || choice.ReplaceDirect) && p.Protocol == "tcp" && p.TargetIP == choice.TargetIP && p.TargetPort == choice.TargetPort {
 			continue
 		}
 		filtered = append(filtered, p)
@@ -203,6 +214,9 @@ func (s *Service) publishPortsAPI(w http.ResponseWriter, r *http.Request) {
 				candidate.Name = name
 			}
 		}
+		if choice.Name != "" {
+			candidate.Name = choice.Name
+		}
 		if err = candidate.validate(); err != nil {
 			fail(w, 400, err.Error())
 			return
@@ -239,6 +253,9 @@ func (s *Service) publishPortsAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if index >= 0 && ports[index].Enabled {
+			if choice.Name != "" {
+				ports[index].Name = choice.Name
+			}
 			continue
 		}
 		if index >= 0 {

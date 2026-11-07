@@ -3,3 +3,5 @@
 .device{border:1px solid #536078;border-radius:8px;margin:12px 0;padding:12px}.device summary{display:flex;align-items:center;gap:12px;cursor:pointer;flex-wrap:wrap}.device summary span{color:#aebbd0}.device-ports{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin:16px 0}.device-port{border:1px solid #45516a;padding:10px;border-radius:6px}.device-port label{display:flex;align-items:center;gap:8px}.device input[type=checkbox]{width:auto}.port-actions{display:flex;gap:5px;flex-wrap:wrap}.port-actions button{padding:5px;font-size:.85rem}
 
 .active-editor{display:grid;grid-template-columns:1fr;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid #536078}.active-editor label{display:flex;flex-direction:column;align-items:stretch;gap:4px}.active-editor input,.active-editor select{width:100%;min-width:0;box-sizing:border-box}
+
+progress{display:block;width:100%;height:12px;margin-top:8px}#manualServiceForm{padding:12px}

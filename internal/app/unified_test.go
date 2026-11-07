@@ -68,7 +68,7 @@ func TestUnifiedPublicationAtomicPersistentAndIdempotent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = db.Exec("INSERT INTO scan_services VALUES(?,?,?,?)", item.ip, item.port, item.name, item.backend)
+		_, err = db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend) VALUES(?,?,?,?)", item.ip, item.port, item.name, item.backend)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,8 +125,8 @@ func TestUnifiedPortCollisionAndExistingDirectService(t *testing.T) {
 	}
 	defer db.Close()
 	s := &Service{db: db, cfg: Config{Role: "client"}}
-	_, _ = db.Exec("INSERT INTO scan_services VALUES('192.168.1.95',8096,'Jellyfin','http://192.168.1.95:8096')")
-	_, _ = db.Exec("INSERT INTO scan_services VALUES('192.168.1.40',8096,'Musikboard','http://192.168.1.40:8096')")
+	_, _ = db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend) VALUES('192.168.1.95',8096,'Jellyfin','http://192.168.1.95:8096')")
+	_, _ = db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend) VALUES('192.168.1.40',8096,'Musikboard','http://192.168.1.40:8096')")
 	// A web and raw target requesting the same external port must both be kept.
 	input := `[{"target_ip":"192.168.1.95","target_port":8096,"protocol":"tcp","auto":true,"domain":"public.example.net"},{"target_ip":"192.168.1.29","target_port":8096,"protocol":"tcp","auto":true},{"target_ip":"192.168.1.40","target_port":8096,"protocol":"tcp","auto":true,"domain":"public.example.net"}]`
 	out := httptest.NewRecorder()
@@ -140,7 +140,7 @@ func TestUnifiedPortCollisionAndExistingDirectService(t *testing.T) {
 		t.Fatalf("unsafe allocation: %+v %+v", web, ports)
 	}
 	// Detecting HTTP later must not silently convert a running direct service.
-	_, _ = db.Exec("INSERT INTO scan_services VALUES('192.168.1.29',8096,'Existing','http://192.168.1.29:8096')")
+	_, _ = db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend) VALUES('192.168.1.29',8096,'Existing','http://192.168.1.29:8096')")
 	out = httptest.NewRecorder()
 	s.publishPortsAPI(out, httptest.NewRequest("POST", "/api/ports/publish", strings.NewReader(input)))
 	if out.Code != 202 {

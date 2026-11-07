@@ -119,10 +119,10 @@ func (s *Service) runPortScan(ctx context.Context, job *scanJob, ips []string, p
 				conn, err := (&net.Dialer{Timeout: 250 * time.Millisecond}).DialContext(ctx, "tcp", net.JoinHostPort(t.ip, strconv.Itoa(t.port)))
 				if err == nil {
 					conn.Close()
-					name, backend := probeLANService(ctx, t.ip, t.port)
+					name, backend, pin := probeLANServiceInfo(ctx, t.ip, t.port, true)
 					s.routeMu.Lock()
 					result, e := s.db.Exec("INSERT INTO scan_results(target_ip,target_port,protocol,found_at) SELECT ?,?,'tcp',? WHERE (SELECT count(*) FROM scan_results)<4096 ON CONFLICT(target_ip,target_port,protocol) DO UPDATE SET found_at=excluded.found_at", t.ip, t.port, time.Now().UTC().Format(time.RFC3339))
-					_, _ = s.db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM scan_results WHERE target_ip=? AND target_port=? AND protocol='tcp') ON CONFLICT(target_ip,target_port) DO UPDATE SET name=excluded.name,backend=excluded.backend", t.ip, t.port, name, backend, t.ip, t.port)
+					_, _ = s.db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend,backend_cert_sha256) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM scan_results WHERE target_ip=? AND target_port=? AND protocol='tcp') ON CONFLICT(target_ip,target_port) DO UPDATE SET name=excluded.name,backend=excluded.backend,backend_cert_sha256=excluded.backend_cert_sha256", t.ip, t.port, name, backend, pin, t.ip, t.port)
 					p := PortForward{Name: name, Protocol: "tcp", TargetIP: t.ip, TargetPort: t.port, PublicPort: t.port}
 					if p.validate() == nil {
 						_, _ = s.db.Exec("INSERT INTO port_forwards(name,protocol,target_ip,target_port,public_port,enabled) SELECT ?,?,?,?,?,0 WHERE (SELECT count(*) FROM port_forwards)<200 ON CONFLICT(protocol,public_port) DO NOTHING", p.Name, p.Protocol, p.TargetIP, p.TargetPort, p.PublicPort)

@@ -112,7 +112,13 @@ func (s *Service) proxy(w http.ResponseWriter, r *http.Request) {
 	}
 	u, _ := url.Parse(target.Backend)
 	p := httputil.NewSingleHostReverseProxy(u)
-	p.Transport = backendTransport
+	if target.BackendCertSHA256 != "" {
+		transport := backendHTTPTransport(target.BackendCertSHA256)
+		defer transport.CloseIdleConnections()
+		p.Transport = transport
+	} else {
+		p.Transport = backendTransport
+	}
 	nonce := r.Header.Get("X-FamilyTunnel-Probe")
 	p.ModifyResponse = func(response *http.Response) error {
 		response.Header.Del("X-FamilyTunnel-Proof")
