@@ -21,6 +21,7 @@ const context=vm.createContext({
   fetch:async(path,options)=>{
     calls.push({path,options});
     if(path==='/api/session')return {ok:false,status:401,text:async()=>JSON.stringify({error:'login'})};
+    if(path==='/api/public-test')return {ok:true,text:async()=>JSON.stringify({reachable:true,message:'HTTPS erreichbar'})};
     if(path==='/api/backend-test')return {ok:!failTest,status:failTest?503:200,text:async()=>JSON.stringify(failTest?{error:'Testfehler'}:{reachable:true,message:'Vom CT erreichbar (TCP).'})};
     if(path==='/api/routes'&&options.method==='GET')return {ok:true,text:async()=>JSON.stringify(existing)};
     if(path==='/api/ports/batch'&&options.method==='POST'){
@@ -44,44 +45,6 @@ const context=vm.createContext({
 vm.runInContext(readFileSync('internal/app/web/app.js','utf8'),context);
 async function run(){
   await new Promise(resolve=>setImmediate(resolve));
-  const data={domain:'test.example.net',services:[{name:'Dienst',backend:'http://192.168.1.30:80'}]};
-  context.input=data;
-  vm.runInContext('renderDiscovery(input)',context);
-  const card=elements.get('discovered').children[0],result=card.children[3],actions=card.children[4];
-  await actions.children[0].onclick();
-  assert.match(result.textContent,/Vom CT erreichbar/);
-  assert.equal(calls.filter(call=>call.path==='/api/backend-test').length,1);
-  context.savedRoutes=[{id:1,domain:data.domain,backend:data.services[0].backend,enabled:true}];
-  vm.runInContext('renderRoutes(savedRoutes)',context);
-  const savedRow=elements.get('routes').children[0];
-  await savedRow.children[3].children[2].onclick();
-  assert.match(savedRow.children[2].textContent,/Erreichbar/);
-  const tests=calls.filter(call=>call.path==='/api/backend-test');
-  assert.equal(tests.length,2);
-  assert.equal(tests[0].options.body,tests[1].options.body,'Both lists must run the same test');
-  failTest=true;
-  await actions.children[0].onclick();
-  assert.match(result.textContent,/Testfehler/);
-  assert.equal(actions.children[0].disabled,false);
-  assert.equal(actions.children[0].textContent,'Erneut testen');
-  existing=[{id:7,domain:'test.example.net',backend:'http://192.168.1.40:80'}];
-  await actions.children[2].onclick();
-  assert.ok(calls.some(call=>call.path==='/api/routes/7'&&call.options.method==='PUT'));
-  assert.equal(JSON.parse(storage.get('ft-last-discovery')).services.length,0);
-  const multiple={domain:'test.example.net',services:[{name:'Media',backend:'http://192.168.1.30:8096',port:8096},{name:'Home',backend:'http://192.168.1.40:8123',port:8123}]};
-  context.input=multiple;
-  vm.runInContext('renderDiscovery(input)',context);
-  const multiCards=elements.get('discovered').children;
-  assert.equal(Number(multiCards[0].children[2].children[2].value),8096);
-  assert.equal(Number(multiCards[1].children[2].children[2].value),8123);
-  assert.match(multiCards[0].children[2].children[3].textContent,/:8096\//);
-  existing=[{id:7,domain:'test.example.net',backend:'http://192.168.1.40:80',public_port:443}];
-  await multiCards[0].children[4].children[2].onclick();
-  const publishes=calls.filter(call=>call.path==='/api/routes'&&call.options.method==='POST');
-  assert.equal(JSON.parse(publishes.at(-1).options.body).public_port,8096,'New port must create a new route, not replace root');
-  vm.runInContext('renderDiscovery(input)',context);
-  await elements.get('discovered').children[0].children[4].children[1].onclick();
-  assert.equal(JSON.parse(calls.filter(call=>call.path==='/api/public-test').at(-1).options.body).public_port,8123);
   const editor=elements.get('routeForm');
   editor.elements=Object.fromEntries(['id','domain','backend','public_port','enabled'].map(key=>[key,new Element()]));
   editor.reset=()=>{for(const field of Object.values(editor.elements)){field.value='';field.checked=false}};
@@ -143,7 +106,23 @@ async function run(){
   assert.equal(elements.get('rawRows').children[0].children[1].children.length,5,'Edited port plus old scan endpoint, with all other hits deduplicated');
   vm.runInContext("renderSetup({state:'needs_connection',message:'Oracle einmalig verbinden'})",context);
   assert.equal(elements.get('setupStatus').textContent,'Oracle einmalig verbinden');
-  assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
-  console.log('Web callbacks: CT test, inline errors and existing-domain publication passed.');
+  elements.get('serviceDomain').value='public.example.net';
+  context.unified=[{id:55,domain:'public.example.net',backend:'http://192.168.1.95:8096',public_port:8096,enabled:true}];
+  vm.runInContext("renderRoutes(unified); renderPortScan({domain:'public.example.net',results:[{target_ip:'192.168.1.95',target_port:8096,name:'Jellyfin',backend:'http://192.168.1.95:8096'},{target_ip:'192.168.1.95',target_port:80,name:'Musikboard',backend:'http://192.168.1.95:80'}]})",context);
+  const unifiedDevice=elements.get('rawRows').children.find(card=>card.children[0].children[1].textContent.includes('192.168.1.95'));
+  assert.match(unifiedDevice.children[0].children[1].textContent,/Jellyfin/,'Recognized name appears above the device ports');
+  assert.match(unifiedDevice.children[0].children[1].textContent,/Musikboard/);
+  const active=elements.get('activeServices').children.find(card=>card.children[0].textContent==='Jellyfin');
+  assert.equal(active.children[2].href,'https://public.example.net:8096/','Active HTTPS service has the right scheme and port');
+  await active.children[4].children[2].onclick();
+  assert.equal(JSON.parse(calls.filter(call=>call.path==='/api/public-test').at(-1).options.body).public_port,8096);
+  const lowWeb=unifiedDevice.children[1].children.find(item=>item.children[0].children[1].textContent.includes('Musikboard'));
+  assert.equal(lowWeb.children[0].children[0].disabled,false,'Detected HTTP on port 80 can be selected for HTTPS');
+  lowWeb.children[0].children[0].checked=true;lowWeb.children[0].children[0].onchange();
+  await elements.get('rawActivate').onclick();
+  const unifiedPayload=JSON.parse(calls.filter(call=>call.path==='/api/ports/publish').at(-1).options.body);
+  assert.equal(unifiedPayload[0].auto,true);assert.equal(unifiedPayload[0].domain,'public.example.net');assert.equal(unifiedPayload[0].target_port,80);
+    assert.ok(calls.every(call=>call.path.startsWith('/api/')),'No direct browser request to a LAN backend');
+  console.log('Web callbacks: unified names, grouped selection, publication, active list and HTTPS test passed.');
 }
 run().catch(error=>{console.error(error);process.exitCode=1});

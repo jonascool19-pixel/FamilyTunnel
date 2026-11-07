@@ -78,7 +78,8 @@ func openDB(path string) (*sql.DB, error) {
  CREATE TABLE IF NOT EXISTS stats(domain TEXT NOT NULL,hour TEXT NOT NULL,requests INTEGER NOT NULL DEFAULT 0,errors INTEGER NOT NULL DEFAULT 0,rx INTEGER NOT NULL DEFAULT 0,tx INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(domain,hour));
  CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,at TEXT NOT NULL,kind TEXT NOT NULL,message TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS port_forwards(id INTEGER PRIMARY KEY,name TEXT NOT NULL,protocol TEXT NOT NULL,target_ip TEXT NOT NULL,target_port INTEGER NOT NULL,public_port INTEGER NOT NULL,enabled INTEGER NOT NULL,UNIQUE(protocol,public_port));
- CREATE TABLE IF NOT EXISTS scan_results(id INTEGER PRIMARY KEY,target_ip TEXT NOT NULL,target_port INTEGER NOT NULL,protocol TEXT NOT NULL,found_at TEXT NOT NULL,UNIQUE(target_ip,target_port,protocol));`)
+ CREATE TABLE IF NOT EXISTS scan_results(id INTEGER PRIMARY KEY,target_ip TEXT NOT NULL,target_port INTEGER NOT NULL,protocol TEXT NOT NULL,found_at TEXT NOT NULL,UNIQUE(target_ip,target_port,protocol));
+ CREATE TABLE IF NOT EXISTS scan_services(target_ip TEXT NOT NULL,target_port INTEGER NOT NULL,name TEXT NOT NULL,backend TEXT NOT NULL,PRIMARY KEY(target_ip,target_port));`)
 	if e != nil {
 		db.Close()
 		return nil, e
