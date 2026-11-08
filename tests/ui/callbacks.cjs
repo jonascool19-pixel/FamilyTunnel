@@ -182,6 +182,8 @@ async function run(){
   assert.equal(elements.get('setupStatus').hidden,true,'Successful setup has no persistent notice');
   vm.runInContext("message('');",context);await vm.runInContext("api('setup-status')",context);
   assert.equal(elements.get('message').textContent,'','Background status polling must not recreate the yellow banner');
+  await vm.runInContext("api('port-test','POST',{id:0,location:'local'})",context);
+  assert.equal(elements.get('message').textContent,'','Background service checks stay in their service cards');
   vm.runInContext("message('Speichern fehlgeschlagen');renderSetup({state:'configured',message:'Regeln eingerichtet'})",context);
   assert.equal(elements.get('message').textContent,'Speichern fehlgeschlagen','Successful setup must retain unrelated errors');
   vm.runInContext("message('Oracle wird eingerichtet');renderSetup({state:'working',message:'Oracle wird eingerichtet'});renderSetup({state:'configured',message:'Regeln eingerichtet'})",context);
