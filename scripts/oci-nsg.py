@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Synchronize only FamilyTunnel-owned OCI rules; unrelated rules remain intact."""
 import argparse
+import contextlib
 import json
 import os
 import shutil
@@ -19,7 +20,7 @@ def camel(value):
 
 def desired_rules(state_dir):
     ports = {("6", 80), ("6", 443), ("17", 51820)}
-    with sqlite3.connect(os.path.join(state_dir, "state.db")) as db:
+    with contextlib.closing(sqlite3.connect(os.path.join(state_dir, "state.db"))) as db:
         ports.update(("6", row[0]) for row in db.execute("SELECT DISTINCT public_port FROM routes WHERE enabled=1"))
         ports.update(("6" if proto == "tcp" else "17", port) for proto, port in db.execute("SELECT protocol,public_port FROM port_forwards WHERE enabled=1"))
     rules = []
@@ -40,7 +41,7 @@ def rule_key(rule):
             rule.get("isStateless", False), json.dumps(options.get("sourcePortRange"), sort_keys=True))
 
 def run(*args):
-    result = subprocess.run(["oci", *args], capture_output=True, text=True, timeout=8)
+    result = subprocess.run(["oci", *args, "--connection-timeout", "5", "--read-timeout", "8", "--max-retries", "0"], capture_output=True, text=True, timeout=25)
     if result.returncode:
         raise RuntimeError("OCI CLI request failed; verify authentication, IAM permissions and target OCID")
     return json.loads(result.stdout or "{}")
@@ -104,9 +105,10 @@ def main():
     parser.add_argument("vnic", nargs="?")
     parser.add_argument("--target-file")
     parser.add_argument("--discover-target", action="store_true")
+    parser.add_argument("--auto-setup", action="store_true")
     parser.add_argument("--state-dir", default="/var/lib/familytunnel")
     args = parser.parse_args()
-    if args.discover_target:
+    if args.discover_target or args.auto_setup:
         if not shutil.which("oci"):
             raise RuntimeError("OCI CLI is not installed")
         config = os.path.join(args.state_dir, "oci", "config")
@@ -114,7 +116,28 @@ def main():
             os.environ["OCI_CLI_CONFIG_FILE"] = config
         else:
             os.environ.setdefault("OCI_CLI_AUTH", "instance_principal")
-        print(json.dumps(discover_target()))
+        target_file=os.path.join(args.state_dir,'oci-target.json')
+        if args.auto_setup and os.path.isfile(target_file):
+            with open(target_file,encoding='utf-8') as f: target=json.load(f)
+            if not target.get('enabled'):
+                raise RuntimeError('Oracle-Automation ist in der bestehenden Konfiguration deaktiviert')
+        else:
+            target=discover_target()
+        if args.auto_setup:
+            # Validate cloud access before committing a newly discovered target.
+            sync_target(target,desired_rules(args.state_dir))
+            import tempfile
+            descriptor,pending=tempfile.mkstemp(prefix='.oci-target-',dir=args.state_dir)
+            try:
+                with os.fdopen(descriptor,'w',encoding='utf-8') as f:
+                    json.dump(target,f)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.chmod(pending,0o600)
+                os.replace(pending,target_file)
+            finally:
+                if os.path.exists(pending): os.unlink(pending)
+        print(json.dumps(target))
         return
     if args.target_file:
         with open(args.target_file, encoding="utf-8") as file:

@@ -26,7 +26,7 @@ jobs:
       - name: Web interface regressions
         run: |
           for script in internal/app/web/*.js; do node --check "$script"; done
-          node scripts/test-web.cjs
+          node tests/ui/callbacks.cjs
       - name: Go vet
         run: go vet ./...
       - name: Shell syntax
@@ -37,17 +37,25 @@ jobs:
       - name: Pairing code round-trip
         run: bash tests/pairing-code.sh
       - name: Python syntax
-        run: python3 -m py_compile scripts/oci-nsg.py tests/port-echo.py
+        run: python3 -m py_compile scripts/*.py tests/*.py
       - name: OCI rule merge tests
         run: python3 tests/oci-rules.py
+      - name: Scoped Oracle account bootstrap tests
+        run: python3 tests/oracle-permissions.py
+      - name: Installer audit rejection tests
+        run: python3 tests/test_package_audit.py
       - name: Real TCP and UDP through WireGuard
         run: |
           sudo apt-get update
           sudo apt-get install -y iproute2 iptables conntrack wireguard-tools sqlite3 jq
           go test -c -o "$RUNNER_TEMP/ft-network-tests" ./internal/app
           sudo env FT_TEST_BINARY="$RUNNER_TEMP/ft-network-tests" bash tests/raw-tunnel.sh
+      - name: Maintenance systemd sandbox regression (no reboot)
+        run: sudo bash tests/maintenance-sandbox.sh
       - name: Linux builds
         run: bash ./scripts/build.sh
+      - name: Clean installer audit
+        run: python3 tests/package-audit.py dist/familytunnel-0.1.0-install.tar.gz
       - uses: actions/upload-artifact@v4
         with:
           name: familytunnel-linux-and-installer

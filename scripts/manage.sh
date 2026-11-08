@@ -122,6 +122,7 @@ uninstall() {
  [[ $(jq -r .role "$STATE/config.json" 2>/dev/null) == server ]] && systemctl disable --now caddy 2>/dev/null || true
  rm -f /etc/systemd/system/familytunnel*.service /etc/systemd/system/familytunnel*.timer /etc/systemd/system/caddy.service.d/familytunnel.conf
  rm -f /usr/local/bin/familytunnel /etc/wireguard/ft0.conf
+ if [[ -L /usr/local/bin/oci && $(readlink -f /usr/local/bin/oci) == /opt/familytunnel/oci-cli/bin/oci ]];then rm -f /usr/local/bin/oci;fi
  rm -rf /usr/local/lib/familytunnel /opt/familytunnel "$STATE"
  systemctl daemon-reload
  echo "FamilyTunnel entfernt. Backups liegen in $BACKUPS. Das Caddy-Paket bleibt installiert."

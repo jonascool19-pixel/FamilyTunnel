@@ -3,7 +3,7 @@ package app
 import "testing"
 
 func TestScanIPv4sIsBounded(t *testing.T) {
-	ips, err := scanIPv4s("192.168.50.50")
+	ips, err := scanIPv4s("192.168.50.10")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -11,7 +11,7 @@ func TestScanIPv4sIsBounded(t *testing.T) {
 		t.Fatalf("got %d scan targets", len(ips))
 	}
 	for _, ip := range ips {
-		if ip == "192.168.50.50" {
+		if ip == "192.168.50.10" {
 			t.Fatal("admin address must not be scanned")
 		}
 	}

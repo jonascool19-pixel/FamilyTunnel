@@ -4,3 +4,13 @@
 *.pem
 config.json
 pairing.json
+*.crt
+*.p12
+*.pfx
+*.log
+*.zip
+*.tar.gz
+.env
+.env.*
+__pycache__/
+.venv/

@@ -42,14 +42,16 @@ type maintenanceJob struct {
 	ReadyAt      time.Time `json:"ready_at,omitempty"`
 }
 type maintenanceState struct {
-	Plan        maintenancePlan `json:"plan"`
-	Job         *maintenanceJob `json:"job,omitempty"`
-	LastSlot    string          `json:"last_slot,omitempty"`
-	Seen        time.Time       `json:"client_seen"`
-	ClientBoot  string          `json:"client_boot"`
-	ClientGrant string          `json:"client_grant"`
-	TestGrant   string          `json:"test_grant"`
-	ClientReady bool            `json:"client_ready"`
+	Plan         maintenancePlan `json:"plan"`
+	Job          *maintenanceJob `json:"job,omitempty"`
+	LastSlot     string          `json:"last_slot,omitempty"`
+	Seen         time.Time       `json:"client_seen"`
+	ClientBoot   string          `json:"client_boot"`
+	ClientGrant  string          `json:"client_grant"`
+	TestGrant    string          `json:"test_grant"`
+	ClientReady  bool            `json:"client_ready"`
+	ClientReason string          `json:"client_reason,omitempty"`
+	ServerReason string          `json:"server_reason,omitempty"`
 }
 type maintenanceLocal struct {
 	Plan     maintenancePlan `json:"plan"`
@@ -66,6 +68,7 @@ type maintenanceInput struct {
 	Test         string          `json:"test"`
 	ID           string          `json:"id"`
 	Ready        bool            `json:"ready"`
+	ReadyReason  string          `json:"ready_reason,omitempty"`
 }
 
 // Inject only in tests. Production reboot commands have fixed arguments and run
@@ -96,33 +99,42 @@ func (s *Service) maintenanceRuntime() maintenanceRuntime {
 			n, _ := strconv.ParseFloat(fields[0], 64)
 			return time.Duration(n * float64(time.Second))
 		},
-		Ready: func(ctx context.Context) bool {
-			services := []string{"is-active", "--quiet", "familytunnel"}
-			if s.cfg.Role == "server" {
-				services = append(services, "caddy")
-			}
-			for _, unit := range services[2:] {
-				if exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", unit).Run() != nil {
-					return false
-				}
-			}
-			b, err := exec.CommandContext(ctx, "wg", "show", "ft0", "latest-handshakes").Output()
-			if err != nil {
-				return false
-			}
-			fields := strings.Fields(string(b))
-			for i := 1; i < len(fields); i += 2 {
-				n, _ := strconv.ParseInt(fields[i], 10, 64)
-				if n > 0 && time.Now().Unix()-n >= 0 && time.Now().Unix()-n < 180 {
-					return true
-				}
-			}
-			return false
-		},
+		Ready: func(ctx context.Context) bool { ready, _ := s.maintenanceReadiness(ctx); return ready },
 		Reboot: func(ctx context.Context) error {
 			return exec.CommandContext(ctx, "systemctl", "--no-block", "reboot").Run()
 		},
 	}
+}
+
+func (s *Service) maintenanceReadiness(ctx context.Context) (bool, string) {
+	if s.maintenance != nil {
+		if s.maintenance.Ready(ctx) {
+			return true, ""
+		}
+		return false, "Dienstprüfung nicht bereit"
+	}
+	units := []string{"familytunnel"}
+	if s.cfg.Role == "server" {
+		units = append(units, "caddy")
+	}
+	for _, unit := range units {
+		if exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", unit).Run() != nil {
+			return false, unit + " läuft noch nicht"
+		}
+	}
+	b, err := exec.CommandContext(ctx, "wg", "show", "ft0", "latest-handshakes").Output()
+	if err != nil {
+		return false, "WireGuard kann vom Wartungsdienst nicht gelesen werden. Beide Systeme vollständig aktualisieren."
+	}
+	fields := strings.Fields(string(b))
+	now := time.Now().Unix()
+	for i := 1; i < len(fields); i += 2 {
+		n, _ := strconv.ParseInt(fields[i], 10, 64)
+		if n > 0 && now-n >= 0 && now-n < 180 {
+			return true, ""
+		}
+	}
+	return false, "Noch keine frische WireGuard-Verbindung"
 }
 
 // PID 1 start time changes on an LXC reboot even with an unchanged host boot ID.
@@ -337,6 +349,16 @@ func (s *Service) maintenanceInternalAPI(w http.ResponseWriter, r *http.Request)
 			v.ClientGrant = in.Grant
 			v.TestGrant = in.Test
 			v.ClientReady = in.Ready
+			// Keep diagnostic messages bounded and exclude control characters.
+			v.ClientReason = strings.Map(func(r rune) rune {
+				if r < ' ' {
+					return -1
+				}
+				return r
+			}, in.ReadyReason)
+			if len(v.ClientReason) > 240 {
+				v.ClientReason = v.ClientReason[:240]
+			}
 			if v.Job != nil && v.Job.State == "client_rebooting" && in.Ready && in.Boot != v.Job.ClientBefore {
 				v.Job.State = "completed"
 				v.Job.Message = "Oracle und FamilyTunnel-CT wurden nacheinander neu gestartet."
@@ -475,13 +497,14 @@ func (s *Service) maintenanceServerTick(ctx context.Context) error {
 	if !maintenanceBoot.MatchString(boot) {
 		return errors.New("Boot-Kennung nicht verfügbar")
 	}
-	ready := rt.Ready(ctx)
+	ready, reason := s.maintenanceReadiness(ctx)
 	uptime := rt.Uptime()
 	var action string
 	var jobID string
 	e := s.mutateMaintenance("maintenance_state", func(v *maintenanceState) error {
 		action = ""
 		jobID = ""
+		v.ServerReason = reason
 		fresh := !v.Seen.IsZero() && now.Sub(v.Seen) >= 0 && now.Sub(v.Seen) < 90*time.Second && v.ClientReady
 		if !maintenanceActive(v.Job) && maintenanceDue(v, now) {
 			if !fresh || v.ClientGrant != v.Plan.Generation || uptime < maintenanceStableFor {
@@ -502,6 +525,13 @@ func (s *Service) maintenanceServerTick(ctx context.Context) error {
 		consent := (j.Source == "test" && v.TestGrant == j.Grant) || (j.Source == "schedule" && v.Plan.Enabled && v.ClientGrant == j.Grant)
 		if j.State == "requested" {
 			if !fresh || !consent || !ready {
+				if !ready {
+					j.Message = "Oracle wartet: " + reason
+				} else if !fresh {
+					j.Message = "Warte auf einen bereiten Heim-CT. " + v.ClientReason
+				} else {
+					j.Message = "Warte auf die passende Neustart-Zustimmung des Heim-CT."
+				}
 				return nil
 			}
 			if v.ClientBoot != j.ClientBefore {
@@ -581,7 +611,8 @@ func (s *Service) maintenanceClientTick(ctx context.Context) error {
 	if l.Plan.Enabled {
 		grant = l.Plan.Generation
 	}
-	v, e := s.maintenanceRemote(ctx, &maintenanceInput{Action: "heartbeat", Boot: boot, Grant: grant, Test: l.Test, Ready: rt.Ready(ctx)})
+	ready, reason := s.maintenanceReadiness(ctx)
+	v, e := s.maintenanceRemote(ctx, &maintenanceInput{Action: "heartbeat", Boot: boot, Grant: grant, Test: l.Test, Ready: ready, ReadyReason: reason})
 	if e != nil {
 		return e
 	}

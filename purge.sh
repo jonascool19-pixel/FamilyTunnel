@@ -7,7 +7,7 @@ if [[ -f /var/lib/familytunnel/config.json ]] && command -v jq >/dev/null 2>&1; 
  role=$(jq -r '.role // empty' /var/lib/familytunnel/config.json 2>/dev/null || true)
 fi
 
-systemctl disable --now familytunnel-repair.timer familytunnel-repair.service familytunnel.service familytunnel-firewall.service wg-quick@ft0.service 2>/dev/null || true
+systemctl disable --now familytunnel-maintenance.timer familytunnel-maintenance.service familytunnel-repair.timer familytunnel-repair.service familytunnel.service familytunnel-firewall.service wg-quick@ft0.service 2>/dev/null || true
 
 if command -v iptables >/dev/null 2>&1; then
  if [[ -x /usr/local/lib/familytunnel/raw-firewall.sh ]];then /usr/local/lib/familytunnel/raw-firewall.sh remove;fi
@@ -20,8 +20,11 @@ rm -f /etc/systemd/system/familytunnel.service \
  /etc/systemd/system/familytunnel-firewall.service \
  /etc/systemd/system/familytunnel-repair.service \
  /etc/systemd/system/familytunnel-repair.timer \
+ /etc/systemd/system/familytunnel-maintenance.service \
+ /etc/systemd/system/familytunnel-maintenance.timer \
  /etc/wireguard/ft0.conf \
  /usr/local/bin/familytunnel
+if [[ -L /usr/local/bin/oci && $(readlink -f /usr/local/bin/oci) == /opt/familytunnel/oci-cli/bin/oci ]];then rm -f /usr/local/bin/oci;fi
 rm -rf /var/lib/familytunnel /var/backups/familytunnel /opt/familytunnel /usr/local/lib/familytunnel
 find /var/tmp -maxdepth 1 -type d -name 'familytunnel-*' -exec rm -rf -- {} + 2>/dev/null || true
 

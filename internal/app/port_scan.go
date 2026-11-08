@@ -25,7 +25,8 @@ type scanJob struct {
 	finished chan struct{}
 }
 
-var quickPorts = []int{22, 80, 443, 1337, 2333, 3000, 3001, 5000, 7777, 8000, 8080, 8081, 8082, 8083, 8096, 8123, 8888, 8920, 9000, 10823, 15777, 26900, 26905, 27015, 27016, 27020, 30814, 32400, 57000}
+// Generic web/media discovery targets only; not configured or automatically published services.
+var quickPorts = []int{80, 443, 3000, 5000, 8000, 8080, 8096, 8123, 8920, 9000, 32400}
 
 func scanPlan(admin, targets, mode string) ([]string, []int, error) {
 	allowed, err := scanIPv4s(admin)

@@ -22,7 +22,7 @@ function renderMaintenance(data,fill=false){
  const active=v.job&&!['completed','failed'].includes(v.job.state);
  const unavailable=data.role!=='client'||!data.worker_installed;
  $('maintenanceSave').disabled=unavailable||Boolean(active);$('maintenanceTest').disabled=unavailable||Boolean(active);
- $('maintenanceError').textContent=data.local_error||(data.role==='server'?'Zeitplan und Test bitte in der Verwaltung deines Heim-CT einstellen.':!data.worker_installed?'Bitte beide Systeme mit dem vollständigen Installer aktualisieren.':'');
+ $('maintenanceError').textContent=data.local_error||v.server_reason||v.client_reason||(data.role==='server'?'Zeitplan und Test bitte in der Verwaltung deines Heim-CT einstellen.':!data.worker_installed?'Bitte beide Systeme mit dem vollständigen Installer aktualisieren.':'');
 }
 async function refreshMaintenance(){
  if(maintenanceBusy||$('app').hidden)return;maintenanceBusy=true;

@@ -63,7 +63,11 @@ else
  [[ $role == server || $role == client ]] || { echo 'Ungültige Rolle.' >&2; exit 1; }
  step "Rolle $role konfigurieren"
  if [[ $role == server ]]; then
-  public_ip=${FT_PUBLIC_IP:-};if [[ -z $public_ip ]]; then read -rp 'Öffentliche IPv4 der Oracle-VM: ' public_ip </dev/tty; fi
+  public_ip=${FT_PUBLIC_IP:-}
+  if [[ -z $public_ip ]];then
+   public_ip=$(curl --proto '=https' --tlsv1.2 --noproxy '*' -4 -fsS --connect-timeout 3 --max-time 6 https://api.ipify.org || true)
+   if [[ -n $public_ip ]];then done_step "Öffentliche IPv4 automatisch erkannt: $public_ip";else read -rp 'Öffentliche IPv4 der Oracle-VM: ' public_ip </dev/tty;fi
+  fi
   python3 - "$public_ip" <<'PY'
 import ipaddress,sys
 ip=ipaddress.ip_address(sys.argv[1]); assert ip.version==4 and ip.is_global, 'Öffentliche IPv4 erforderlich'
@@ -120,8 +124,8 @@ for value in subprocess.check_output(["hostname", "-I"], text=True).split():
 PY
 )
    if [[ -n $detected_ip ]]; then
-    read -rp "Interne IPv4 dieses CT für die Webverwaltung [$detected_ip]: " admin_ip </dev/tty
-    admin_ip=${admin_ip:-$detected_ip}
+    admin_ip=$detected_ip
+    done_step "Interne Verwaltungsadresse automatisch erkannt: $admin_ip"
    else
     read -rp 'Interne IPv4 dieses CT für die Webverwaltung (z. B. 192.168.1.50): ' admin_ip </dev/tty
    fi
@@ -208,6 +212,10 @@ done_step "Aktiver Controller bestätigt: ${binary_hash:0:12}"
 [[ -s $STATE/admin.crt && -s $STATE/state.db ]]
 sqlite3 "$STATE/state.db" 'PRAGMA integrity_check;' | grep -qx ok
 done_step 'Alle Selbsttests waren erfolgreich.'
+if [[ $role == server ]];then
+ step 'Oracle-Anbindung und Cloud-Freigaben automatisch einrichten'
+ bash "$ROOT/scripts/oracle-setup.sh" "$STATE"
+fi
 admin_url="https://$(jq -r .listen "$STATE/config.json")"
 initial_password=""
 if [[ -s $STATE/initial-password ]]; then initial_password=$(tr -d '\r\n' < "$STATE/initial-password"); fi
@@ -222,7 +230,7 @@ if [[ $role == server ]];then
  echo 'in das Feld "Pairing-Code vom Oracle-Server" einfügen.'
  echo 'Der Code enthält geheime Zugangsdaten: nicht veröffentlichen oder teilen.'
  echo "Die Quelldatei bleibt geschützt unter: $STATE/pairing.json"
- echo 'OCI: NSG muss der VM-VNIC zugewiesen sein. Automation: /usr/local/lib/familytunnel/oci-nsg.py NSG_OCID [VNIC_OCID]'
+ echo 'Oracle-Anbindung wurde im Installationsablauf geprüft; keine zusätzliche NSG-Auswahl in der Oberfläche erforderlich.'
 fi
 echo "$cert_fingerprint"
 
