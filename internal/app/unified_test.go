@@ -58,7 +58,7 @@ func TestUnifiedPublicationAtomicPersistentAndIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &Service{db: db, cfg: Config{Role: "client"}, routeChanges: make(chan struct{}, 1)}
+	s := &Service{db: db, cfg: Config{Role: "client"}, checkLAN: func(context.Context, string, int) error { return nil }, routeChanges: make(chan struct{}, 1)}
 	for _, item := range []struct {
 		ip            string
 		port          int
@@ -124,7 +124,7 @@ func TestUnifiedPortCollisionAndExistingDirectService(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	s := &Service{db: db, cfg: Config{Role: "client"}}
+	s := &Service{db: db, cfg: Config{Role: "client"}, checkLAN: func(context.Context, string, int) error { return nil }}
 	_, _ = db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend) VALUES('192.168.1.95',8096,'Jellyfin','http://192.168.1.95:8096')")
 	_, _ = db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend) VALUES('192.168.1.40',8096,'Musikboard','http://192.168.1.40:8096')")
 	// A web and raw target requesting the same external port must both be kept.

@@ -75,7 +75,7 @@ func TestDevicePublicationPreservesMappings(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	s := &Service{db: db, cfg: Config{Role: "client"}, routeChanges: make(chan struct{}, 1)}
+	s := &Service{db: db, cfg: Config{Role: "client"}, checkLAN: func(context.Context, string, int) error { return nil }, routeChanges: make(chan struct{}, 1)}
 	web := []Route{{ID: 1, Domain: "test.example.net", Backend: "http://192.168.1.95:8096", PublicPort: 8096, Enabled: true}}
 	initial := []PortForward{{ID: 1, Name: "existing", Protocol: "tcp", TargetIP: "192.168.1.29", TargetPort: 7777, PublicPort: 7777, Enabled: true}, {ID: 2, Name: "draft", Protocol: "udp", TargetIP: "192.168.1.29", TargetPort: 7777, PublicPort: 7777}}
 	if err = replaceAllRoutes(db, web, initial); err != nil {

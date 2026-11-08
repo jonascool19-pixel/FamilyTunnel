@@ -176,6 +176,17 @@ func (s *Service) publishPortsAPI(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "Zwischen 1 und 200 Ports auswählen")
 		return
 	}
+	for _, choice := range choices {
+		p := PortForward{Protocol: strings.ToLower(choice.Protocol), TargetIP: choice.TargetIP, TargetPort: choice.TargetPort, PublicPort: 1024}
+		if err := p.validate(); err != nil {
+			fail(w, 400, err.Error())
+			return
+		}
+	}
+	if err := s.preflightChoices(r.Context(), choices); err != nil {
+		fail(w, 409, err.Error())
+		return
+	}
 	s.routeMu.Lock()
 	defer s.routeMu.Unlock()
 	ports, err := portForwards(s.db)

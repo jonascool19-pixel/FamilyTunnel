@@ -47,7 +47,7 @@ func TestManualAutoSetupConvertsDirectHTTPSAndPreservesPins(t *testing.T) {
 	}
 	defer db.Close()
 	pin := strings.Repeat("a", 64)
-	s := &Service{db: db, cfg: Config{Role: "client"}, routeChanges: make(chan struct{}, 1), probeService: func(ctx context.Context, ip string, port int) (string, string, string) {
+	s := &Service{db: db, cfg: Config{Role: "client"}, checkLAN: func(context.Context, string, int) error { return nil }, routeChanges: make(chan struct{}, 1), probeService: func(ctx context.Context, ip string, port int) (string, string, string) {
 		if port == 8920 {
 			return "Jellyfin", "https://" + ip + ":8920", pin
 		}

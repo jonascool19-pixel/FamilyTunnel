@@ -41,6 +41,7 @@ type Service struct {
 	setupMu       sync.RWMutex
 	setup         setupView
 	probeService  func(context.Context, string, int) (string, string, string)
+	checkLAN      func(context.Context, string, int) error
 	maintenance   *maintenanceRuntime
 }
 

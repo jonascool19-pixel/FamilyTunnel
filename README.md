@@ -160,7 +160,7 @@ Nach einer Passwortänderung wird die Datei mit dem Initialpasswort entfernt. Ei
 5. Die Liste **Aktivierte Dienste** zeigt die gespeicherten Freigaben. Tunnel-, lokale Firewall- und gegebenenfalls OCI-Regeln werden im Hintergrund eingerichtet.
 6. Lokale und öffentliche Tests verfolgen. Bei einer geänderten oder zuvor falsch erkannten Webfreigabe kann **Automatisch einrichten** die Erkennung erneuern.
 
-Ein Domainname allein verrät keine lokalen IP-Adressen oder offenen Ports. Der Heim-CT sucht sein eigenes privates /24-Netz. Ein gefundener Port ist noch keine veröffentlichte Freigabe.
+Ein Domainname allein verrät keine lokalen IP-Adressen oder offenen Ports. Der Heim-CT sucht sein eigenes privates /24-Netz. Ein gefundener Port ist noch keine veröffentlichte Freigabe. Eine neue Suche ersetzt alte Suchtreffer und zugehörige inaktive Suchvorschläge der durchsuchten Geräte. TCP-Ziele werden unmittelbar vor dem Einrichten erneut vom Heim-CT geprüft. Ist eines nicht erreichbar, wird die gesamte Auswahl ohne neue Freigaben abgelehnt; bereits aktivierte Dienste bleiben erhalten.
 
 HTTPS wird anhand einer tatsächlichen Antwort erkannt, auch wenn ein Dienst dafür einen Domainnamen beim TLS-Aufbau benötigt. Bei privaten Zertifikaten wird das bei der ausdrücklichen Einrichtung erkannte Zertifikat gebunden. Eine neue Zertifikatbindung benötigt eine erneute bewusste Einrichtung.
 

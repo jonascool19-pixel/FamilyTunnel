@@ -129,6 +129,12 @@ func (s *Service) runPortScan(ctx context.Context, job *scanJob, ips []string, p
 					}
 					name, backend, pin, tlsName := probeLANServiceNamed(ctx, t.ip, t.port, true, serverName)
 					<-webProbes
+					if dialLAN(ctx, t.ip, t.port) != nil {
+						s.scanMu.Lock()
+						job.Done++
+						s.scanMu.Unlock()
+						continue
+					}
 					s.routeMu.Lock()
 					result, e := s.db.Exec("INSERT INTO scan_results(target_ip,target_port,protocol,found_at) SELECT ?,?,'tcp',? WHERE (SELECT count(*) FROM scan_results)<4096 ON CONFLICT(target_ip,target_port,protocol) DO UPDATE SET found_at=excluded.found_at", t.ip, t.port, time.Now().UTC().Format(time.RFC3339))
 					_, _ = s.db.Exec("INSERT INTO scan_services(target_ip,target_port,name,backend,backend_cert_sha256,backend_server_name) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM scan_results WHERE target_ip=? AND target_port=? AND protocol='tcp') ON CONFLICT(target_ip,target_port) DO UPDATE SET name=excluded.name,backend=excluded.backend,backend_cert_sha256=excluded.backend_cert_sha256,backend_server_name=excluded.backend_server_name", t.ip, t.port, name, backend, pin, tlsName, t.ip, t.port)
@@ -246,6 +252,11 @@ func (s *Service) scanAPI(w http.ResponseWriter, r *http.Request) {
 				fail(w, 409, "Vorherige Suche wird noch beendet")
 				return
 			}
+		}
+		if err := s.clearScannedTargets(ips); err != nil {
+			s.scanMu.Unlock()
+			fail(w, 500, "Alte Suchtreffer konnten nicht entfernt werden")
+			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 		job := &scanJob{Running: true, Targets: strings.Join(ips, ","), Mode: input.Mode, Total: len(ips) * len(ports), Started: time.Now().UTC().Format(time.RFC3339), Message: "TCP-Ports werden geprüft. UDP erfordert eine passende Dienstprüfung oder manuelle Freigabe.", cancel: cancel, finished: make(chan struct{})}
