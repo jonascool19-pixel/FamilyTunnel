@@ -9,7 +9,7 @@ ROOT_FILES = {
     "README.md", "TESTING.md", "SECURITY.md", "CONTRIBUTING.md", "install.sh", "install-familytunnel.sh",
     "install-server.sh", "install-client.sh", "bootstrap.sh", "purge.sh",
 }
-HELPERS = {"manage.sh", "firewall.sh", "raw-firewall.sh", "oci-nsg.py", "oracle-setup.sh", "oracle-permissions.py"}
+HELPERS = {"archive.py", "manage.sh", "firewall.sh", "raw-firewall.sh", "oci-nsg.py", "oracle-setup.sh", "oracle-permissions.py"}
 BINARIES = {"familytunnel-linux-amd64", "familytunnel-linux-arm64"}
 REQUIRED = ROOT_FILES | {"scripts/" + x for x in HELPERS} | {
     "dist/SHA256SUMS", *("dist/" + x for x in BINARIES),

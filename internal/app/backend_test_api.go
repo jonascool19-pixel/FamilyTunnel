@@ -3,32 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
-
-func probeBackend(ctx context.Context, backend string) map[string]any {
-	u, err := url.Parse(backend)
-	if err != nil || u == nil || u.Hostname() == "" {
-		return map[string]any{"reachable": false, "message": "Ungültige Zieladresse."}
-	}
-	port := u.Port()
-	if port == "" {
-		port = "80"
-		if u.Scheme == "https" {
-			port = "443"
-		}
-	}
-	c, err := (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "tcp", net.JoinHostPort(u.Hostname(), port))
-	if err != nil {
-		return map[string]any{"reachable": false, "message": "Vom CT nicht erreichbar: " + err.Error()}
-	}
-	c.Close()
-	return map[string]any{"reachable": true, "message": "Vom CT erreichbar (TCP)."}
-}
 
 func (s *Service) backendTestAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

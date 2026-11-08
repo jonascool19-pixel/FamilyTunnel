@@ -21,6 +21,11 @@ func TestDialLANRejectsClosedEndpoint(t *testing.T) {
 	if err := dialLAN(context.Background(), "127.0.0.1", port); err != nil {
 		t.Fatal(err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := dialLAN(ctx, "127.0.0.1", port); err == nil {
+		t.Fatal("cancelled check accepted")
+	}
 	listener.Close()
 	if err := dialLAN(context.Background(), "127.0.0.1", port); err == nil {
 		t.Fatal("closed listener accepted")

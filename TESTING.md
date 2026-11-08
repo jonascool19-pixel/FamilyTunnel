@@ -2,7 +2,7 @@
 
 Für eine Freigabe werden ein frischer Oracle-VPS, ein frischer unprivilegierter Proxmox-CT, eine Testdomain und ein HTTP-Backend im Heimnetz verwendet.
 
-1. VPS mit dem Server-Befehl installieren, ausgegebenen Pairing-Code kopieren und in den Client-Installer des CT einfügen. Prüfen: ungültiger oder abgeschnittener Code wird abgelehnt; eingefügter Code ist zur Kontrolle sichtbar; die erkannte private CT-IP wird als Enter-Standard angeboten; Dienste aktiv, Datenbank `ok`, Initialpasswort vorhanden, GUI nur auf interner Adresse erreichbar.
+1. VPS mit dem Server-Befehl installieren, ausgegebenen Pairing-Code kopieren und in den Client-Installer des CT einfügen. Prüfen: ungültiger oder abgeschnittener Code wird abgelehnt; eingefügter Code ist zur Kontrolle sichtbar; die private CT-IP wird automatisch erkannt und angezeigt; Dienste aktiv, Datenbank `ok`, Initialpasswort vorhanden, GUI nur auf interner Adresse erreichbar.
 2. Installer auf beiden Seiten erneut ausführen. Vorher und nachher SHA-256 der `config.json`, `ft0.conf`, Datenbank und Pairing-Datei vergleichen. Schlüssel und Daten müssen gleich bleiben.
 3. Beide Systeme neu starten. Prüfen: Tunnel-Handshake innerhalb von 90 Sekunden, Controller/Caddy aktiv, GUI und Testdomain erreichbar.
 4. `systemctl stop wg-quick@ft0` im CT, mindestens zwei Reparaturintervalle warten. Prüfen: Timer startet Tunnel neu; Caddy liefert während der Unterbrechung 502 statt einen falschen Dienst.

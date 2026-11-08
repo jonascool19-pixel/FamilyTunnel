@@ -188,7 +188,7 @@ if [[ ! -f $release_dir/familytunnel ]]; then
  mv -Tf "$release_dir/familytunnel.new" "$release_dir/familytunnel"
 fi
 printf '%s  %s\n' "$binary_hash" "$release_dir/familytunnel" | sha256sum -c -
-install -m 755 "$ROOT/scripts/manage.sh" "$ROOT/scripts/firewall.sh" "$ROOT/scripts/raw-firewall.sh" "$ROOT/scripts/oci-nsg.py" /usr/local/lib/familytunnel/
+install -m 755 "$ROOT/scripts/manage.sh" "$ROOT/scripts/firewall.sh" "$ROOT/scripts/raw-firewall.sh" "$ROOT/scripts/oci-nsg.py" "$ROOT/scripts/archive.py" /usr/local/lib/familytunnel/
 ln -sfn "$release_dir" /opt/familytunnel/current.new
 mv -Tf /opt/familytunnel/current.new /opt/familytunnel/current
 ln -sfn /opt/familytunnel/current/familytunnel /usr/local/bin/familytunnel

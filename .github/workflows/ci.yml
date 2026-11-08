@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version: "1.27.3"
           cache: true
       - name: Go tests
         run: go test ./...
@@ -27,6 +27,8 @@ jobs:
         run: |
           for script in internal/app/web/*.js; do node --check "$script"; done
           node tests/ui/callbacks.cjs
+      - name: Known Go vulnerability check
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: Go vet
         run: go vet ./...
       - name: Shell syntax
@@ -44,12 +46,16 @@ jobs:
         run: python3 tests/oracle-permissions.py
       - name: Installer audit rejection tests
         run: python3 tests/test_package_audit.py
+      - name: Archive security regressions
+        run: python3 tests/archive_security.py
       - name: Real TCP and UDP through WireGuard
         run: |
           sudo apt-get update
           sudo apt-get install -y iproute2 iptables conntrack wireguard-tools sqlite3 jq
           go test -c -o "$RUNNER_TEMP/ft-network-tests" ./internal/app
           sudo env FT_TEST_BINARY="$RUNNER_TEMP/ft-network-tests" bash tests/raw-tunnel.sh
+      - name: Real update rollback regression (isolated)
+        run: python3 tests/update_rollback.py
       - name: Maintenance systemd sandbox regression (no reboot)
         run: sudo bash tests/maintenance-sandbox.sh
       - name: Linux builds

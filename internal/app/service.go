@@ -127,10 +127,6 @@ func (s *Service) handlers() http.Handler {
 			fail(w, 405, "GET or DELETE required")
 			return
 		}
-		if r.Method != "GET" {
-			fail(w, 405, "GET required")
-			return
-		}
 		s.flushStats()
 		v, e := statsJSON(s.db, r.URL.Query().Get("period"))
 		if e != nil {

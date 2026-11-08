@@ -29,3 +29,9 @@ Die Erkennung eines privaten HTTPS-Dienstes ist eine bewusste erste Vertrauensen
 ## Bereinigte Historie
 
 Eine bestätigte Historienbereinigung entfernt betroffene Inhalte aus den veröffentlichten Branches. Bereits vorhandene Klone, Forks und zwischengespeicherte GitHub-Ansichten können ältere Inhalte behalten. Alte Branches nicht wieder in die bereinigte Historie mergen. [GitHub beschreibt die verbleibenden Kopien und Cache-Grenzen](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository).
+
+## Prüfung vom 8. November 2026
+
+Der Code wurde auf offensichtliche Fehler bei Anmeldung, interner API, privaten Zieladressen, Archivverarbeitung und Updates geprüft. Go-Abhängigkeiten und Build-Werkzeuge wurden aktualisiert. `govulncheck` mit Go 1.27.3 meldet keine bekannten Schwachstellen in den tatsächlich verwendeten Paketen. Eine Modulwarnung betrifft das ungenutzte OpenPGP-Paket in `golang.org/x/crypto`; FamilyTunnel importiert ausschließlich Argon2 aus diesem Modul. Ein solcher Check ersetzt kein vollständiges externes Sicherheitsaudit.
+
+Archive werden vor dem Schreiben vollständig geprüft: keine symbolischen oder harten Links, Geräte, absoluten Pfade, Pfadwechsel, doppelten Einträge oder privilegierten Dateimodi. Der Update-Rollback greift auch bei einem sofort scheiternden Dienststart. Temporäre Backup-Verzeichnisse werden nach dem Ende der Funktion zuverlässig entfernt. Entsprechende Negativ- und Rollbacktests laufen in GitHub Actions ohne Produktivsysteme zu verändern.

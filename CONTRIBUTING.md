@@ -6,7 +6,7 @@
 
 ## Lokale Prüfungen
 
-Benötigt werden Go ab 1.23, Node.js für die Oberflächentests und Python 3 für die OCI-/Paketprüfungen. Diese Entwicklungswerkzeuge werden nicht auf den später installierten FamilyTunnel-Systemen benötigt.
+Benötigt werden Go 1.27.3, Node.js für die Oberflächentests und Python 3 für die OCI-/Paketprüfungen. Go und Node.js werden auf den später installierten Systemen nicht benötigt; Python 3 ist dort für Installation und OCI-Hilfen erforderlich.
 
 ```text
 go test ./...
@@ -36,3 +36,5 @@ Neustarttests verwenden simulierte Uhren, Boot-Kennungen und Neustartfunktionen.
 ## Build-Ergebnis
 
 Der bestehende Ablauf erzeugt amd64-/arm64-Binaries, ein Linux-Updatearchiv, ein vollständiges Installationsarchiv und SHA-256-Dateien. Geprüfte Ergebnisse stehen als Actions-Artefakt bereit. Ein automatisches GitHub Release ist nicht eingerichtet. Änderungen an Plattformen, Versionierung oder Veröffentlichung müssen mit dem Projektbetreiber abgestimmt werden.
+
+Produktions-Builds verwenden ausschließlich `scripts/build.sh` in GitHub Actions. Im Repository werden nur die zwei fertigen Archive samt Prüfsummen veröffentlicht; einzelne Binärdateien bleiben im Actions-Artefakt und in den Archiven.
