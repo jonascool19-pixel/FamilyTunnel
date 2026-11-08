@@ -39,7 +39,7 @@ function renderDevices(){
  if(!groups.size){const empty=document.createElement('p');empty.textContent='Noch keine Geräte gefunden. Starte die Heimnetzsuche.';root.append(empty)}selectionLabel()
 }
 function renderPorts(rows){portRows=rows;renderDevices()}
-function renderSetup(status){setupState=status||{state:'waiting',message:'Noch kein Status empfangen.'};paintSetup($('setupStatus'));refreshServiceStatuses();if(typeof queueAutomaticCheck==='function')for(const entry of serviceStateNodes.values())queueAutomaticCheck(entry.p)}
+function renderSetup(status){const previousMessage=setupState.message;setupState=status||{state:'waiting',message:'Noch kein Status empfangen.'};const node=$('setupStatus');paintSetup(node);node.hidden=setupState.state==='configured';if(node.hidden&&[previousMessage,setupState.message].includes($('message').textContent))message('');refreshServiceStatuses();if(typeof queueAutomaticCheck==='function')for(const entry of serviceStateNodes.values())queueAutomaticCheck(entry.p)}
 
 function portMessage(text){$('rawMessage').textContent=text;message(text)}
 function rawPort(value){const port=Number(value);if(!Number.isInteger(port)||port<1||port>65535)throw Error('Port muss zwischen 1 und 65535 liegen.');return port}
